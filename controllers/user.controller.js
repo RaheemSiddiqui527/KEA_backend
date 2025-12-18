@@ -2,7 +2,7 @@ import User from '../models/user.models.js';
 import Resume from '../models/resume.models.js';
 import JobApplication from '../models/JobApplication.models.js';
 import SavedJob from '../models/savedJob.models.js';
-import EventRegistration from '../models/eventRegistration.models.js'; // Fixed: lowercase
+import EventRegistration from '../models/EventRegistration.models.js'; // Fixed: lowercase
 import Connection from '../models/connection.models.js';
 import Activity from '../models/activity.models.js';
 import Notification from '../models/notification.models.js';
