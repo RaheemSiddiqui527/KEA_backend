@@ -31,7 +31,8 @@ dotenv.config();
 const app = express();
 app.use(cors(
   "http://localhost:3000",
-  "http://localhost:3001"
+  "http://localhost:3001",
+  "https://kea.nexcorealliance.com"
 ));
 // app.use(cors({
   //   origin: process.env.FRONTEND_URL || 'http://localhost:3000'|| 'http://localhost:3001 ',
