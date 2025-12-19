@@ -5,6 +5,9 @@ import Event from "../models/event.models.js";
 import Tool from "../models/tool.models.js";
 import Resource from "../models/resource.models.js";
 import Seminar from "../models/seminar.models.js";
+import Gallery from "../models/gallery.models.js";
+import Feedback from "../models/feedback.models.js";
+import Mentor from "../models/mentor.models.js";
 
 const dashboardStats = async (req, res, next) => {
   try {
@@ -13,17 +16,25 @@ const dashboardStats = async (req, res, next) => {
       jobsPending,
       blogsPending,
       eventsPending,
+      galleryPending,
+      feedbackPending,
       totalMembers,
       totalJobs,
-      totalBlogs
+      totalBlogs,
+      totalGallery,
+      totalFeedback
     ] = await Promise.all([
       User.countDocuments({ membershipStatus: "pending" }),
       Job.countDocuments({ status: "pending" }),
       Blog.countDocuments({ status: "pending" }),
       Event.countDocuments({ status: "pending" }),
+      Gallery.countDocuments({ isApproved: false }),
+      Feedback.countDocuments({ status: "pending" }),
       User.countDocuments(),
       Job.countDocuments(),
       Blog.countDocuments(),
+      Gallery.countDocuments({ isApproved: true }),
+      Feedback.countDocuments()
     ]);
 
     // 🔥 RECENT ACTIVITIES
@@ -33,6 +44,11 @@ const dashboardStats = async (req, res, next) => {
       .select("name createdAt");
 
     const recentJobs = await Job.find()
+      .sort({ createdAt: -1 })
+      .limit(2)
+      .select("title createdAt");
+
+    const recentGallery = await Gallery.find()
       .sort({ createdAt: -1 })
       .limit(2)
       .select("title createdAt");
@@ -47,15 +63,22 @@ const dashboardStats = async (req, res, next) => {
         title: "New job posted",
         time: j.createdAt,
         description: j.title
+      })),
+      ...recentGallery.map(g => ({
+        title: "New photo uploaded",
+        time: g.createdAt,
+        description: g.title
       }))
-    ].sort((a, b) => new Date(b.time) - new Date(a.time));
+    ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 10);
 
     res.json({
       stats: {
         totalMembers,
-        pendingApprovals: membersPending + jobsPending + blogsPending + eventsPending,
+        pendingApprovals: membersPending + jobsPending + blogsPending + eventsPending + galleryPending + feedbackPending,
         totalJobs,
         blogs: totalBlogs,
+        gallery: totalGallery,
+        feedback: totalFeedback
       },
       activities,
     });
@@ -63,7 +86,6 @@ const dashboardStats = async (req, res, next) => {
     next(err);
   }
 };
-
 
 // Members
 const getMemberById = async (req, res, next) => {
@@ -294,6 +316,198 @@ const rejectEvent = async (req, res, next) => {
     ).populate("organizer", "name email");
     if (!ev) return res.status(404).json({ message: "Event not found" });
     res.json(ev);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// =====================
+// GALLERY MANAGEMENT
+// =====================
+const getAllGallery = async (req, res, next) => {
+  try {
+    const { category, search, page = 1, limit = 20 } = req.query;
+    const query = {};
+    
+    if (category && category !== 'All photos') {
+      query.category = category;
+    }
+    
+    if (search) {
+      query.$text = { $search: search };
+    }
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const [items, total] = await Promise.all([
+      Gallery.find(query)
+        .populate('uploadedBy', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Gallery.countDocuments(query)
+    ]);
+    
+    res.json({
+      items,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const pendingGallery = async (req, res, next) => {
+  try {
+    const items = await Gallery.find({ isApproved: false })
+      .populate('uploadedBy', 'name email')
+      .sort({ createdAt: -1 });
+    res.json(items);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const approveGallery = async (req, res, next) => {
+  try {
+    const item = await Gallery.findByIdAndUpdate(
+      req.params.id,
+      { isApproved: true },
+      { new: true, runValidators: false }
+    ).populate('uploadedBy', 'name email');
+    
+    if (!item) return res.status(404).json({ message: "Gallery item not found" });
+    res.json(item);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const rejectGallery = async (req, res, next) => {
+  try {
+    const item = await Gallery.findByIdAndDelete(req.params.id);
+    if (!item) return res.status(404).json({ message: "Gallery item not found" });
+    res.json({ message: "Gallery item rejected and deleted" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteGallery = async (req, res, next) => {
+  try {
+    const item = await Gallery.findByIdAndDelete(req.params.id);
+    if (!item) return res.status(404).json({ message: "Gallery item not found" });
+    res.json({ message: "Gallery item deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// =====================
+// FEEDBACK MANAGEMENT
+// =====================
+const getAllFeedback = async (req, res, next) => {
+  try {
+    const { status, category, page = 1, limit = 20 } = req.query;
+    const query = {};
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (category) {
+      query.category = category;
+    }
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const [feedbacks, total] = await Promise.all([
+      Feedback.find(query)
+        .populate('user', 'name email')
+        .populate('adminResponse.respondedBy', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Feedback.countDocuments(query)
+    ]);
+    
+    res.json({
+      feedbacks,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getFeedbackById = async (req, res, next) => {
+  try {
+    const feedback = await Feedback.findById(req.params.id)
+      .populate('user', 'name email profile')
+      .populate('adminResponse.respondedBy', 'name email');
+    
+    if (!feedback) return res.status(404).json({ message: "Feedback not found" });
+    res.json(feedback);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const pendingFeedback = async (req, res, next) => {
+  try {
+    const feedbacks = await Feedback.find({ status: 'pending' })
+      .populate('user', 'name email')
+      .sort({ createdAt: -1 });
+    res.json(feedbacks);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateFeedbackStatus = async (req, res, next) => {
+  try {
+    const { status, response } = req.body;
+    
+    const updateData = { status };
+    
+    if (response) {
+      updateData.adminResponse = {
+        message: response,
+        respondedBy: req.user._id,
+        respondedAt: new Date()
+      };
+    }
+    
+    const feedback = await Feedback.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: false }
+    )
+    .populate('user', 'name email')
+    .populate('adminResponse.respondedBy', 'name email');
+    
+    if (!feedback) return res.status(404).json({ message: "Feedback not found" });
+    res.json(feedback);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteFeedback = async (req, res, next) => {
+  try {
+    const feedback = await Feedback.findByIdAndDelete(req.params.id);
+    if (!feedback) return res.status(404).json({ message: "Feedback not found" });
+    res.json({ message: "Feedback deleted successfully" });
   } catch (err) {
     next(err);
   }
@@ -532,6 +746,8 @@ const getAdminStats = async (req, res, next) => {
       jobsApproved, 
       blogsApproved, 
       eventsApproved,
+      galleryApproved,
+      feedbackResolved,
       totalTools,
       totalResources,
       totalSeminars
@@ -540,18 +756,22 @@ const getAdminStats = async (req, res, next) => {
       Job.countDocuments({ status: "approved" }),
       Blog.countDocuments({ status: "published" }),
       Event.countDocuments({ status: "approved" }),
+      Gallery.countDocuments({ isApproved: true }),
+      Feedback.countDocuments({ status: "resolved" }),
       Tool.countDocuments(),
       Resource.countDocuments(),
       Seminar.countDocuments(),
     ]);
 
-    const totalReviews = membersApproved + jobsApproved + blogsApproved + eventsApproved;
+    const totalReviews = membersApproved + jobsApproved + blogsApproved + eventsApproved + galleryApproved;
 
     res.json({
       membersApproved,
       jobsApproved,
       blogsApproved,
       eventsApproved,
+      galleryApproved,
+      feedbackResolved,
       totalReviews,
       totalTools,
       totalResources,
@@ -562,7 +782,7 @@ const getAdminStats = async (req, res, next) => {
   }
 };
 
-// Settings & Backup (placeholder implementations)
+// Settings & Backup
 const getSettings = async (req, res, next) => {
   try {
     const settings = {
@@ -590,7 +810,7 @@ const updateSettings = async (req, res, next) => {
 
 const createBackup = async (req, res, next) => {
   try {
-    const [users, jobs, blogs, events, tools, resources, seminars] = await Promise.all([
+    const [users, jobs, blogs, events, tools, resources, seminars, gallery, feedback] = await Promise.all([
       User.find(),
       Job.find(),
       Blog.find(),
@@ -598,6 +818,8 @@ const createBackup = async (req, res, next) => {
       Tool.find(),
       Resource.find(),
       Seminar.find(),
+      Gallery.find(),
+      Feedback.find(),
     ]);
 
     const backup = {
@@ -609,6 +831,8 @@ const createBackup = async (req, res, next) => {
       tools,
       resources,
       seminars,
+      gallery,
+      feedback,
     };
 
     res.json(backup);
@@ -628,6 +852,8 @@ const restoreBackup = async (req, res, next) => {
       Tool.deleteMany({}),
       Resource.deleteMany({}),
       Seminar.deleteMany({}),
+      Gallery.deleteMany({}),
+      Feedback.deleteMany({}),
     ]);
 
     await Promise.all([
@@ -638,6 +864,8 @@ const restoreBackup = async (req, res, next) => {
       Tool.insertMany(backup.tools || []),
       Resource.insertMany(backup.resources || []),
       Seminar.insertMany(backup.seminars || []),
+      Gallery.insertMany(backup.gallery || []),
+      Feedback.insertMany(backup.feedback || []),
     ]);
 
     res.json({ message: "Backup restored successfully" });
@@ -697,4 +925,16 @@ export default {
   getAllSeminars,
   getSeminarById,
   deleteSeminar,
+  // Gallery
+  getAllGallery,
+  pendingGallery,
+  approveGallery,
+  rejectGallery,
+  deleteGallery,
+  // Feedback
+  getAllFeedback,
+  getFeedbackById,
+  pendingFeedback,
+  updateFeedbackStatus,
+  deleteFeedback,
 };

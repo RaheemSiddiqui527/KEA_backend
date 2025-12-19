@@ -38,6 +38,20 @@ router.get('/events/:id', AdminController.getEventById);
 router.post('/events/approve/:id', AdminController.approveEvent);
 router.post('/events/reject/:id', AdminController.rejectEvent);
 
+// Gallery routes
+router.get('/gallery', AdminController.getAllGallery);
+router.get('/gallery/pending', AdminController.pendingGallery);
+router.post('/gallery/:id/approve', AdminController.approveGallery);
+router.post('/gallery/:id/reject', AdminController.rejectGallery);
+router.delete('/gallery/:id', AdminController.deleteGallery);
+
+// Feedback routes
+router.get('/feedback', AdminController.getAllFeedback);
+router.get('/feedback/pending', AdminController.pendingFeedback);
+router.get('/feedback/:id', AdminController.getFeedbackById);
+router.put('/feedback/:id', AdminController.updateFeedbackStatus);
+router.delete('/feedback/:id', AdminController.deleteFeedback);
+
 // Tools routes
 router.get('/tools', AdminController.getAllTools);
 router.get('/tools/:id', AdminController.getToolById);
