@@ -116,7 +116,10 @@ app.use(helmet({
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://kea.nexcorealliance.com'
+  'https://kea.nexcorealliance.com',
+  'https://admin.kea.nexcorealliance.com',
+  "https://kea-user.vercel.app/",
+  "https://kea-admin.vercel.app/"
 ];
 
 app.use(cors({
