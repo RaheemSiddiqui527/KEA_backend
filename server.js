@@ -33,6 +33,13 @@ dotenv.config();
 
 const app = express();
 
+
+app.use(cors({
+  origin: [process.env.CORS_ORIGIN , "http://localhost:3000" , "http:localhost:3001",'https://kea-user.vercel.app',
+    'https://kea-admin.vercel.app'],
+  credentials: true,
+}));
+
 // =====================
 // BASIC MIDDLEWARE
 // =====================
@@ -113,29 +120,6 @@ app.use(helmet({
 // CORS CONFIGURATION
 // =====================
 
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'https://kea.nexcorealliance.com',
-  'https://admin.kea.nexcorealliance.com',
-  "https://kea-user.vercel.app/",
-  "https://kea-admin.vercel.app/"
-];
-
-app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
 
 // =====================
 // APPLY SECURITY MIDDLEWARE
