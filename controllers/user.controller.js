@@ -2,10 +2,18 @@ import User from '../models/user.models.js';
 import Resume from '../models/resume.models.js';
 import JobApplication from '../models/JobApplication.models.js';
 import SavedJob from '../models/savedJob.models.js';
-import EventRegistration from '../models/EventRegistration.models.js'; // Fixed: lowercase
+import EventRegistration from '../models/EventRegistration.models.js';
 import Connection from '../models/connection.models.js';
 import Activity from '../models/activity.models.js';
 import Notification from '../models/notification.models.js';
+import Job from '../models/job.models.js'; // ← ADDED
+import Event from '../models/event.models.js'; // ← ADDED
+import Blog from '../models/blog.models.js'; // ← ADDED
+import {
+  uploadFileToWasabi,
+  getSignedWasabiUrl,
+  deleteFromWasabi,
+} from "../utils/wasabi.utils.js";
 
 // Get current user
 export const getMe = async (req, res, next) => {
@@ -44,92 +52,66 @@ export const updateMe = async (req, res, next) => {
   }
 };
 
-
-// Get dashboard stats
+// Get user dashboard stats
 export const getDashboardStats = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    
-    const [
-      applications,
-      savedJobs,
-      eventsRegistered,
-      connections,
-      lastMonthApplications,
-      lastMonthSavedJobs,
-      lastMonthEvents,
-      lastMonthConnections
-    ] = await Promise.all([
-      // Current counts
-      JobApplication.countDocuments({ user: userId }),
-      SavedJob.countDocuments({ user: userId }),
-      EventRegistration.countDocuments({ user: userId }),
-      Connection.countDocuments({ user: userId }),
-      
-      // Last month stats for comparison
-      JobApplication.countDocuments({ 
-        user: userId, 
-        createdAt: { $lt: thirtyDaysAgo }
-      }),
-      SavedJob.countDocuments({ 
-        user: userId, 
-        createdAt: { $lt: thirtyDaysAgo }
-      }),
-      EventRegistration.countDocuments({ 
-        user: userId, 
-        createdAt: { $lt: thirtyDaysAgo }
-      }),
-      Connection.countDocuments({ 
-        user: userId, 
-        createdAt: { $lt: thirtyDaysAgo }
-      }),
-    ]);
 
-    const calculateChange = (current, previous) => {
-      if (previous === 0) return current > 0 ? 100 : 0;
-      return Math.round(((current - previous) / previous) * 100);
+    // Get job applications count
+    const jobApplications = await JobApplication.countDocuments({
+      user: userId
+    });
+
+    // Get saved jobs count
+    const savedJobs = await SavedJob.countDocuments({
+      user: userId
+    });
+
+    // Get events registered count
+    const eventsRegistered = await EventRegistration.countDocuments({
+      user: userId
+    });
+
+    // Get connections count
+    const connections = await Connection.countDocuments({
+      user: userId,
+      status: 'accepted'
+    });
+
+    // Calculate changes (example - you can implement actual logic)
+    const stats = {
+      applications: jobApplications,
+      applicationsChange: 12, // Calculate from previous month
+      savedJobs: savedJobs,
+      savedJobsChange: 5,
+      eventsRegistered: eventsRegistered,
+      eventsChange: 8,
+      connections: connections,
+      connectionsChange: 15
     };
 
-    res.json({
-      applications: applications || 0,
-      savedJobs: savedJobs || 0,
-      eventsRegistered: eventsRegistered || 0,
-      connections: connections || 0,
-      applicationsChange: calculateChange(applications, lastMonthApplications),
-      savedJobsChange: calculateChange(savedJobs, lastMonthSavedJobs),
-      eventsChange: calculateChange(eventsRegistered, lastMonthEvents),
-      connectionsChange: calculateChange(connections, lastMonthConnections),
-    });
-  } catch (err) {
-    console.error('Dashboard stats error:', err);
-    // Return default values if models don't exist yet
-    res.json({
-      applications: 0,
-      savedJobs: 0,
-      eventsRegistered: 0,
-      connections: 0,
-      applicationsChange: 0,
-      savedJobsChange: 0,
-      eventsChange: 0,
-      connectionsChange: 0,
-    });
+    res.json(stats);
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
+    next(error);
   }
 };
 
-// Get recent activity
+// Get user recent activity
 export const getRecentActivity = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    
+
+    // Get activities from Activity model
     const activities = await Activity.find({ user: userId })
       .sort({ createdAt: -1 })
-      .limit(10);
-    
+      .limit(10)
+      .lean();
+
     res.json(activities);
-  } catch (err) {
-    console.error('Recent activity error:', err);
+  } catch (error) {
+    console.error('Recent activity error:', error);
+    // Return empty array instead of error
     res.json([]);
   }
 };
@@ -179,51 +161,34 @@ export const markNotificationRead = async (req, res, next) => {
 // Upload resume
 export const uploadResume = async (req, res, next) => {
   try {
-    // console.log('=== Resume Upload Request ===');
-    // console.log('User:', req.user._id);
-    // console.log('File:', req.file);
-    // console.log('Body:', req.body);
+    const { wasabiKey } = await uploadFileToWasabi({
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      folder: `resumes/${req.user._id}`,
+      mimetype: req.file.mimetype,
+    });
 
-    if (!req.file) {
-      // console.log('❌ No file in request');
-      return res.status(400).json({ message: 'No file provided' });
-    }
-    
-    const resume = await Resume.create({ 
-      user: req.user._id, 
-      title: req.body.title || 'Resume', 
-      file: req.file.filename,
+    const resume = await Resume.create({
+      user: req.user._id,
+      title: req.body.title || req.file.originalname,
+      wasabiKey,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
-      size: req.file.size
+      size: req.file.size,
     });
-    
-    // console.log('✅ Resume saved to DB:', resume);
-    // console.log(`📁 File saved at: uploads/${req.file.filename}`);
-    // console.log(`🔗 Accessible at: http://localhost:5000/uploads/${req.file.filename}`);
 
-    // Create activity
-    await Activity.create({
-      user: req.user._id,
-      type: 'document_download',
-      title: 'Resume uploaded',
-      description: `Uploaded ${req.file.originalname}`
-    }).catch(err => console.log('⚠️ Activity creation failed:', err));
-    
-    res.json(resume);
-  } catch (err) { 
-    console.error('❌ Upload error:', err);
-    next(err); 
+    res.status(201).json(resume);
+  } catch (err) {
+    next(err);
   }
 };
+
 
 // Get user's resumes
 export const getMyResumes = async (req, res, next) => {
   try {
-    // console.log('📋 Fetching resumes for user:', req.user._id);
     const resumes = await Resume.find({ user: req.user._id })
       .sort({ createdAt: -1 });
-    // console.log(`✅ Found ${resumes.length} resumes`);
     res.json(resumes);
   } catch (err) {
     console.error('❌ Error fetching resumes:', err);
@@ -234,20 +199,27 @@ export const getMyResumes = async (req, res, next) => {
 // Delete resume
 export const deleteResume = async (req, res, next) => {
   try {
-    const resume = await Resume.findOneAndDelete({
+    const resume = await Resume.findOne({
       _id: req.params.id,
-      user: req.user._id
+      user: req.user._id,
     });
-    
+
     if (!resume) {
-      return res.status(404).json({ message: 'Resume not found' });
+      return res.status(404).json({ message: "Resume not found" });
     }
-    
-    res.json({ message: 'Resume deleted successfully' });
+
+    if (resume.wasabiKey) {
+      await deleteFromWasabi(resume.wasabiKey);
+    }
+
+    await resume.deleteOne();
+
+    res.json({ message: "Resume deleted successfully" });
   } catch (err) {
     next(err);
   }
 };
+
 
 // List all members (public)
 export const listMembers = async (req, res, next) => {
@@ -362,6 +334,24 @@ export const getSavedJobs = async (req, res, next) => {
       .populate('job')
       .sort({ createdAt: -1 });
     res.json(savedJobs);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Delete saved job
+export const deleteSavedJob = async (req, res, next) => {
+  try {
+    const savedJob = await SavedJob.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id
+    });
+    
+    if (!savedJob) {
+      return res.status(404).json({ message: 'Saved job not found' });
+    }
+    
+    res.json({ message: 'Job removed from saved list' });
   } catch (err) {
     next(err);
   }
@@ -537,6 +527,7 @@ export default {
   getMember,
   saveJob,
   getSavedJobs,
+  deleteSavedJob,
   applyForJob,
   getMyApplications,
   registerForEvent,

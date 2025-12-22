@@ -28,6 +28,7 @@ import SeminarRoutes from "./routes/seminar.routes.js";
 import galleryRoutes from "./routes/gallery.routes.js";
 import userSettingsRoutes from "./routes/userSettings.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
+import upload from "./utils/upload.js";
 
 dotenv.config();
 
@@ -201,12 +202,13 @@ const __dirname = path.dirname(__filename);
 
 connectDB(process.env.MONGO_URI);
 
-app.use(
-  "/uploads",
-  express.static(
-    path.join(__dirname, "..", process.env.UPLOAD_DIR || "uploads")
-  )
-);
+app.post("/upload", upload.single("file"), (req, res) => {
+  res.json({
+    message: "File uploaded successfully",
+    fileUrl: req.file.location, // Wasabi file URL
+    key: req.file.key,
+  });
+});
 
 // =====================
 // API ROUTES

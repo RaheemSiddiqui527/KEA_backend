@@ -10,10 +10,12 @@ const resumeSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  file: {
-    type: String,
-    required: true
-  },
+  fileUrl: {
+  type: String,
+  required: true
+},
+wasabiKey: String,
+  
   originalName: String,
   mimeType: String,
   size: Number
