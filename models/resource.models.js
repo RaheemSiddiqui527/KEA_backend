@@ -5,12 +5,14 @@ const resourceSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
+
     subtitle: {
       type: String,
-      trim: true
+      trim: true,
     },
+
     category: {
       type: String,
       required: true,
@@ -19,52 +21,56 @@ const resourceSchema = new mongoose.Schema(
         'Technical papers',
         'Project reports',
         'Workshop & webinars',
-        'Templates & checklists'
-      ]
+        'Templates & checklists',
+      ],
     },
+
     format: {
       type: String,
       required: true,
-      enum: ['PDF', 'DOCX', 'Video', 'Link', 'Images', 'File']
+      enum: ['PDF', 'DOCX', 'Video', 'Link', 'Images', 'File'],
     },
-    tags: [
-      {
-        type: String,
-        trim: true
-      }
-    ],
-    link: {
+
+    tags: [{ type: String, trim: true }],
+
+    // 🔐 For external resources only (Video / Link)
+    externalLink: {
       type: String,
-      required: true
     },
+
+    // 🔐 For Wasabi stored files only
+    wasabiKey: {
+      type: String,
+    },
+
     description: {
       type: String,
-      trim: true
+      trim: true,
     },
+
     author: {
       type: String,
       default: 'Anonymous',
-      trim: true
+      trim: true,
     },
+
     icon: {
       type: String,
       default: 'FileText',
-      enum: ['FileText', 'Video', 'Link2', 'Image']
+      enum: ['FileText', 'Video', 'Link2', 'Image'],
     },
-    fileSize: String,
-    filePath: String
+
+    fileSize: Number,
+    mimeType: String,
   },
-  {
-    timestamps: true
-  }
+  { timestamps: true }
 );
 
-// Text index for search
+// 🔎 Text search index
 resourceSchema.index({
   title: 'text',
   description: 'text',
-  tags: 'text'
+  tags: 'text',
 });
 
-const Resource = mongoose.model('Resource', resourceSchema);
-export default Resource;
+export default mongoose.model('Resource', resourceSchema);

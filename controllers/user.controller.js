@@ -13,7 +13,10 @@ import {
   uploadFileToWasabi,
   getSignedWasabiUrl,
   deleteFromWasabi,
+  deleteFilesFromS3
 } from "../utils/wasabi.utils.js";
+
+
 
 // Get current user
 export const getMe = async (req, res, next) => {
@@ -161,17 +164,14 @@ export const markNotificationRead = async (req, res, next) => {
 // Upload resume
 export const uploadResume = async (req, res, next) => {
   try {
-    const { wasabiKey } = await uploadFileToWasabi({
-      buffer: req.file.buffer,
-      originalName: req.file.originalname,
-      folder: `resumes/${req.user._id}`,
-      mimetype: req.file.mimetype,
-    });
+    if (!req.file) {
+      return res.status(400).json({ message: "File is required" });
+    }
 
     const resume = await Resume.create({
       user: req.user._id,
       title: req.body.title || req.file.originalname,
-      wasabiKey,
+      wasabiKey: req.file.key, // 🔥 IMPORTANT
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
@@ -184,14 +184,27 @@ export const uploadResume = async (req, res, next) => {
 };
 
 
-// Get user's resumes
+
 export const getMyResumes = async (req, res, next) => {
   try {
     const resumes = await Resume.find({ user: req.user._id })
       .sort({ createdAt: -1 });
+
     res.json(resumes);
   } catch (err) {
-    console.error('❌ Error fetching resumes:', err);
+    next(err);
+  }
+};
+
+// Get user's resumes
+export const getResumeUrl = async (req, res, next) => {
+  try {
+    const resume = await Resume.findById(req.params.id);
+
+    const url = await getSignedS3Url(resume.wasabiKey);
+
+    res.json({ url });
+  } catch (err) {
     next(err);
   }
 };
@@ -209,7 +222,8 @@ export const deleteResume = async (req, res, next) => {
     }
 
     if (resume.wasabiKey) {
-      await deleteFromWasabi(resume.wasabiKey);
+      await deleteFilesFromS3(resume.wasabiKey);
+
     }
 
     await resume.deleteOne();
@@ -522,6 +536,7 @@ export default {
   markNotificationRead,
   uploadResume,
   getMyResumes,
+  getResumeUrl,
   deleteResume,
   listMembers,
   getMember,

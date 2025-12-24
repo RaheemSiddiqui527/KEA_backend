@@ -1,62 +1,70 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl as getPresignedUrl } from "@aws-sdk/s3-request-presigner";
-import { v4 as uuidv4 } from 'uuid';
-import dotenv from 'dotenv';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { v4 as uuidv4 } from "uuid";
+import dotenv from "dotenv";
 
 dotenv.config();
 
+/**
+ * S3 / Wasabi Client
+ */
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
+  endpoint: process.env.WASABI_ENDPOINT, // ✅ REQUIRED for Wasabi
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
 
-const uploadFileToS3 = async (file) => {
-  const key = `uploads/${uuidv4()}-${file.originalname}`;
+/**
+ * Upload File
+ */
+export const uploadFileToS3 = async (file, folder = "uploads") => {
+  const key = `${folder}/${uuidv4()}-${file.originalname}`;
 
-  const params = {
-    Bucket: process.env.AWS_BUCKET_NAME,  
-    Key: key,
-    Body: file.buffer,
-    ContentType: file.mimetype,
-    ContentDisposition: 'attachment',
-    ACL: 'public-read',
-  };
-
-  await s3.send(new PutObjectCommand(params));
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    })
+  );
 
   return {
-    Location: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
-    Key: key
+    key,
   };
 };
 
-const getSignedUrl = async (s3Url) => {
-  const key = new URL(s3Url).pathname.slice(1); // removes the first `/`
-  const command = new PutObjectCommand({
-    Bucket: process.env.AWS_BUCKET_NAME,
-    Key: key,
-    ResponseContentDisposition: 'attachment',
-  });
-
-  const signedUrl = await getPresignedUrl(s3, command, { expiresIn: 3600 });
-  return signedUrl;
+/**
+ * Get Signed URL (View / Download)
+ */
+export const getSignedS3Url = async (key) => {
+  return getSignedUrl(
+    s3,
+    new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+      ResponseContentDisposition: "inline", // 👀 browser preview
+    }),
+    { expiresIn: 3600 } // 1 hour
+  );
 };
 
-const deleteFilesFromS3 = async (s3Url) => {
-  const key = new URL(s3Url).pathname.slice(1);
-
-  await s3.send(new DeleteObjectCommand({
-    Bucket: process.env.AWS_BUCKET_NAME,
-    Key: key,
-  }));
+/**
+ * Delete File
+ */
+export const deleteFilesFromS3 = async (key) => {
+  await s3.send(
+    new DeleteObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: key,
+    })
+  );
 };
-
-export {
-  uploadFileToS3,
-  getSignedUrl,
-  deleteFilesFromS3
-};
-    

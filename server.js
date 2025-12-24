@@ -202,13 +202,15 @@ const __dirname = path.dirname(__filename);
 
 connectDB(process.env.MONGO_URI);
 
-app.post("/upload", upload.single("file"), (req, res) => {
+app.post("/upload", upload.single("file"), async (req, res, next) => {
+  const { key } = await uploadFileToS3(req.file);
+
   res.json({
     message: "File uploaded successfully",
-    fileUrl: req.file.location, // Wasabi file URL
-    key: req.file.key,
+    key,
   });
 });
+
 
 // =====================
 // API ROUTES

@@ -10,38 +10,46 @@ import { s3 } from "../config/wasabi.client.js";
 
 const BUCKET = process.env.AWS_BUCKET_NAME;
 
-export const uploadFileToWasabi = async (file, folder) => {
-  const ext = path.extname(file.originalname);
+export const uploadFileToWasabi = async ({
+  buffer,
+  originalName,
+  folder,
+  mimetype,
+}) => {
+  const ext = path.extname(originalName);
   const key = `${folder}/${uuidv4()}${ext}`;
 
   await s3.send(
     new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
-      Body: file.buffer,
-      ContentType: file.mimetype,
+      Body: buffer,
+      ContentType: mimetype,
     })
   );
 
-  return key;
+  return { wasabiKey: key };
 };
 
 export const getSignedWasabiUrl = async (key) => {
-  return await getSignedUrl(
+  return getSignedUrl(
     s3,
-    new GetObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-    }),
+    new GetObjectCommand({ Bucket: BUCKET, Key: key }),
     { expiresIn: 300 }
   );
 };
 
 export const deleteFromWasabi = async (key) => {
   await s3.send(
-    new DeleteObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-    })
+    new DeleteObjectCommand({ Bucket: BUCKET, Key: key })
   );
 };
+export const deleteFilesFromS3 = deleteFromWasabi;
+export const getSignedS3Url = getSignedWasabiUrl;
+export const uploadFileToS3 = async (file, folder) =>
+  uploadFileToWasabi({
+    buffer: file.buffer,
+    originalName: file.originalname,
+    folder,
+    mimetype: file.mimetype,
+  });

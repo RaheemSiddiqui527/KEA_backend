@@ -1,5 +1,5 @@
 import Resource from '../models/resource.models.js';
-import fs from 'fs';
+import { uploadFileToS3,getSignedS3Url,deleteFilesFromS3} from '../utils/wasabi.utils.js';
 import path from 'path';
 
 /**
@@ -89,44 +89,39 @@ export const getResourceById = async (req, res) => {
  */
 export const createResource = async (req, res) => {
   try {
-    const { title, category, format, tags, link, description, author, subtitle } =
-      req.body;
+    const {
+      title,
+      category,
+      format,
+      tags,
+      externalLink,
+      description,
+      author,
+    } = req.body;
 
-    if (!title || !category || !format || !link) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields'
-      });
+    if (!title || !category || !format || !externalLink) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    let icon = 'FileText';
-    if (format === 'Video') icon = 'Video';
-    else if (format === 'Link') icon = 'Link2';
-    else if (format === 'Images') icon = 'Image';
+    if (format !== 'Link' && format !== 'Video') {
+      return res.status(400).json({ error: 'Use upload API for file resources' });
+    }
 
     const resource = await Resource.create({
       title,
-      subtitle: subtitle || `${category} • ${format}`,
+      subtitle: `${category} • ${format}`,
       category,
       format,
-      tags: tags ? tags.split(',').map(t => t.trim()) : [],
-      link,
+      tags: Array.isArray(tags) ? tags : [],
+      externalLink,
       description,
       author: author || 'Anonymous',
-      icon
+      icon: format === 'Video' ? 'Video' : 'Link2',
     });
 
-    res.status(201).json({
-      success: true,
-      message: 'Resource created successfully',
-      resource
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create resource',
-      message: error.message
-    });
+    res.status(201).json({ success: true, resource });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -144,7 +139,7 @@ export const uploadResource = async (req, res) => {
     if (!title || !category) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields'
+        error: 'Missing required fields',
       });
     }
 
@@ -156,32 +151,133 @@ export const uploadResource = async (req, res) => {
     else if (['.mp4', '.avi', '.mov'].includes(ext)) format = 'Video';
     else if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) format = 'Images';
 
-    let icon = format === 'Video' ? 'Video' : format === 'Images' ? 'Image' : 'FileText';
+    const icon =
+      format === 'Video'
+        ? 'Video'
+        : format === 'Images'
+        ? 'Image'
+        : 'FileText';
+
+    const { wasabiKey } = await uploadFileToS3(req.file, 'resources');
 
     const resource = await Resource.create({
       title,
-      subtitle: `${category} • ${format} • ${(req.file.size / 1024).toFixed(1)} KB`,
+      subtitle: `${category} • ${format}`,
       category,
       format,
       tags: tags ? tags.split(',').map(t => t.trim()) : [],
-      link: `/uploads/${req.file.filename}`,
-      filePath: req.file.path,
-      fileSize: `${(req.file.size / 1024).toFixed(1)} KB`,
+      wasabiKey,
+      mimeType: req.file.mimetype,
+      fileSize: req.file.size,
       description,
       author: author || 'Anonymous',
-      icon
+      icon,
     });
 
     res.status(201).json({
       success: true,
-      message: 'File uploaded successfully',
-      resource
+      message: 'Resource uploaded successfully',
+      resource,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: 'Failed to upload file',
+      error: 'Failed to upload resource',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * View resource - Proxy the file to avoid CORS issues
+ * This serves the file directly through your backend
+ */
+export const viewResource = async (req, res) => {
+  try {
+    const resource = await Resource.findById(req.params.id);
+
+    if (!resource) {
+      return res.status(404).json({
+        success: false,
+        error: 'Resource not found',
+      });
+    }
+
+    // For external links
+    if (!resource.wasabiKey) {
+      return res.json({
+        success: true,
+        externalLink: resource.externalLink || null,
+        type: 'external'
+      });
+    }
+
+    // ✅ OPTION 1: Proxy the file (recommended for CORS issues)
+    if (req.query.proxy === 'true') {
+      const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
+      
+      res.set({
+        'Content-Type': contentType,
+        'Content-Disposition': 'inline',
+        'Content-Length': buffer.length,
+        'Cache-Control': 'public, max-age=31536000',
+        'Access-Control-Allow-Origin': '*',
+      });
+      
+      return res.send(buffer);
+    }
+
+    // ✅ OPTION 2: Return signed URL
+    const url = await getSignedS3Url(resource.wasabiKey, 3600);
+
+    return res.json({
+      success: true,
+      url,
+      type: 'signed',
+      // Also provide proxy URL as fallback
+      proxyUrl: `${req.protocol}://${req.get('host')}/api/resources/${resource._id}/view?proxy=true`,
+      format: resource.format,
+      mimeType: resource.mimeType
+    });
+  } catch (error) {
+    console.error('❌ View error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to view resource',
       message: error.message
+    });
+  }
+};
+
+/**
+ * Download resource
+ */
+export const downloadResource = async (req, res) => {
+  try {
+    const resource = await Resource.findById(req.params.id);
+
+    if (!resource || !resource.wasabiKey) {
+      return res.status(404).json({
+        success: false,
+        error: 'Resource not found',
+      });
+    }
+
+    // Proxy download
+    const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
+    
+    res.set({
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="${resource.title}"`,
+      'Content-Length': buffer.length,
+    });
+    
+    return res.send(buffer);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to download resource',
+      message: error.message,
     });
   }
 };
@@ -232,8 +328,8 @@ export const deleteResource = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Resource not found' });
     }
 
-    if (resource.filePath && fs.existsSync(resource.filePath)) {
-      fs.unlinkSync(resource.filePath);
+    if (resource.wasabiKey) {
+      await deleteFilesFromS3(resource.wasabiKey);
     }
 
     res.json({ success: true, message: 'Resource deleted successfully' });
@@ -241,7 +337,7 @@ export const deleteResource = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete resource',
-      message: error.message
+      message: error.message,
     });
   }
 };
