@@ -39,7 +39,8 @@ const postSchema = new mongoose.Schema({
 const groupSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
   description: {
     type: String,
@@ -47,8 +48,8 @@ const groupSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    required: false,  // ✅ Changed to false to allow existing documents
-    default: 'General'  // ✅ Added default value
+    required: false,
+    default: 'General'
   },
   type: {
     type: String,
@@ -59,6 +60,7 @@ const groupSchema = new mongoose.Schema({
   region: String,
   logo: String,
   banner: String,
+  
   creator: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -67,6 +69,30 @@ const groupSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  
+  // APPROVAL SYSTEM
+  isDefault: {
+    type: Boolean,
+    default: false
+  },
+  isApproved: {
+    type: Boolean,
+    default: false
+  },
+  approvalStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  approvedAt: Date,
+  rejectionReason: String,
+  requestReason: String,
+  estimatedMembers: String,
+  
   members: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -97,6 +123,7 @@ const groupSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  
   settings: {
     allowMemberPosts: {
       type: Boolean,
@@ -110,10 +137,20 @@ const groupSchema = new mongoose.Schema({
       type: Boolean,
       default: true
     }
+  },
+  
+  isActive: {
+    type: Boolean,
+    default: true
   }
-}, { timestamps: true });
+}, { 
+  timestamps: true 
+});
 
 // Text search index
 groupSchema.index({ name: 'text', description: 'text' });
+
+// ✅ REMOVE THE pre('save') HOOK COMPLETELY
+// Stats will be calculated in controllers when needed
 
 export default mongoose.model('Group', groupSchema);

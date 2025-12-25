@@ -20,7 +20,7 @@ router.get('/categories/stats', getCategoryStats);
 router.get('/', getAllResources);
 
 // ================= VIEW (MUST BE BEFORE :id) =================
-router.get('/:id/view', auth, viewResource);
+router.get('/:id/view',  viewResource);
 
 // ================= CRUD =================
 router.get('/:id', getResourceById);

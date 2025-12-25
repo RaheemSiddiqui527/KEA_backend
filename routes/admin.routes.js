@@ -195,4 +195,15 @@ router.post('/backup', adminCriticalLimiter, AdminController.createBackup);
 router.post('/restore', adminCriticalLimiter, AdminController.restoreBackup);
 router.post('/test-email', adminSensitiveLimiter, AdminController.sendTestEmail);
 
+// Read operations
+router.get('/groups', adminReadLimiter, AdminController.getAllGroups);
+router.get('/groups/pending', adminReadLimiter, AdminController.pendingGroups);
+router.get('/groups/:id', adminReadLimiter, AdminController.getGroupById);
+
+// Write operations (approval/rejection)
+router.post('/groups/approve/:id', adminWriteLimiter, AdminController.approveGroup);
+router.post('/groups/reject/:id', adminWriteLimiter, AdminController.rejectGroup);
+
+// Delete operation
+router.delete('/groups/:id', adminWriteLimiter, AdminController.deleteGroup);
 export default router;

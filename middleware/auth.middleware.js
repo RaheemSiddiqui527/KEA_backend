@@ -15,3 +15,44 @@ export const auth = async (req, res, next) => {
     return res.status(401).json({ message: 'Authentication failed' });
   }
 };
+// middleware/admin.middleware.js
+export const isAdmin = (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    // Check if user has admin role
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Admin access required. You do not have permission to perform this action.' 
+      });
+    }
+
+    next();
+  } catch (err) {
+    console.error('❌ Error in isAdmin middleware:', err);
+    res.status(500).json({ message: 'Authorization check failed' });
+  }
+};
+
+// Optional: More granular moderator check
+export const isModerator = (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    // Allow both admin and moderator roles
+    if (!['admin', 'moderator'].includes(req.user.role)) {
+      return res.status(403).json({ 
+        message: 'Moderator access required' 
+      });
+    }
+
+    next();
+  } catch (err) {
+    console.error('❌ Error in isModerator middleware:', err);
+    res.status(500).json({ message: 'Authorization check failed' });
+  }
+};

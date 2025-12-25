@@ -39,7 +39,7 @@ app.use(
     origin: [
       process.env.CORS_ORIGIN,
       "http://localhost:3000",
-      "http:localhost:3001",
+      "http://localhost:3001",
       "https://kea-user.vercel.app",
       "https://kea-admin.vercel.app",
       "https://admin.kea.nexcorealliance.com",

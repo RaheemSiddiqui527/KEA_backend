@@ -8,6 +8,7 @@ import Seminar from "../models/seminar.models.js";
 import Gallery from "../models/gallery.models.js";
 import Feedback from "../models/feedback.models.js";
 import Mentor from "../models/mentor.models.js";
+import Group from "../models/group.models.js";  
 
 const dashboardStats = async (req, res, next) => {
   try {
@@ -881,6 +882,168 @@ const sendTestEmail = async (req, res, next) => {
     next(err);
   }
 };
+const getAllGroups = async (req, res, next) => {
+  try {
+    const { status, category, search, page = 1, limit = 20 } = req.query;
+    const query = {};
+    
+    // Filter by approval status
+    if (status) {
+      query.approvalStatus = status;
+    }
+    
+    // Filter by category
+    if (category && category !== 'All') {
+      query.category = category;
+    }
+    
+    // Search functionality
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { discipline: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const [groups, total] = await Promise.all([
+      Group.find(query)
+        .populate('creator', 'name email profile')
+        .populate('approvedBy', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Group.countDocuments(query)
+    ]);
+    
+    // Get status counts
+    const statusCounts = await Group.aggregate([
+      {
+        $group: {
+          _id: '$approvalStatus',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    res.json({
+      groups,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      },
+      statusCounts: statusCounts.reduce((acc, curr) => {
+        acc[curr._id] = curr.count;
+        return acc;
+      }, { pending: 0, approved: 0, rejected: 0 })
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getGroupById = async (req, res, next) => {
+  try {
+    const group = await Group.findById(req.params.id)
+      .populate('creator', 'name email profile')
+      .populate('approvedBy', 'name email')
+      .populate('members.user', 'name email profile');
+    
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+    
+    res.json(group);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const pendingGroups = async (req, res, next) => {
+  try {
+    const groups = await Group.find({ approvalStatus: 'pending' })
+      .populate('creator', 'name email profile')
+      .sort({ createdAt: -1 });
+    
+    res.json(groups);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const approveGroup = async (req, res, next) => {
+  try {
+    const group = await Group.findById(req.params.id);
+    
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+    
+    group.isApproved = true;
+    group.isActive = true;
+    group.approvalStatus = 'approved';
+    group.approvedBy = req.user._id;
+    group.approvedAt = new Date();
+    group.rejectionReason = undefined;
+    
+    await group.save();
+    
+    const updatedGroup = await Group.findById(group._id)
+      .populate('creator', 'name email')
+      .populate('approvedBy', 'name email');
+    
+    res.json(updatedGroup);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const rejectGroup = async (req, res, next) => {
+  try {
+    const { reason } = req.body;
+    
+    const group = await Group.findById(req.params.id);
+    
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+    
+    group.isApproved = false;
+    group.isActive = false;
+    group.approvalStatus = 'rejected';
+    group.rejectionReason = reason || 'Does not meet requirements';
+    group.approvedBy = req.user._id;
+    group.approvedAt = new Date();
+    
+    await group.save();
+    
+    const updatedGroup = await Group.findById(group._id)
+      .populate('creator', 'name email')
+      .populate('approvedBy', 'name email');
+    
+    res.json(updatedGroup);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteGroup = async (req, res, next) => {
+  try {
+    const group = await Group.findByIdAndDelete(req.params.id);
+    
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+    
+    res.json({ message: "Group deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
 
 export default {
   getMemberById,
@@ -937,4 +1100,11 @@ export default {
   pendingFeedback,
   updateFeedbackStatus,
   deleteFeedback,
+  // Groups
+  getAllGroups,
+  getGroupById,
+  pendingGroups,
+  approveGroup,
+  rejectGroup,
+  deleteGroup
 };

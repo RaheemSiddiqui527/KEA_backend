@@ -1,5 +1,5 @@
 import Resource from '../models/resource.models.js';
-import { uploadFileToS3,getSignedS3Url,deleteFilesFromS3} from '../utils/wasabi.utils.js';
+import { uploadFileToS3, getSignedS3Url, deleteFilesFromS3, getFileBuffer } from '../utils/wasabi.utils.js';
 import path from 'path';
 
 /**
@@ -155,8 +155,8 @@ export const uploadResource = async (req, res) => {
       format === 'Video'
         ? 'Video'
         : format === 'Images'
-        ? 'Image'
-        : 'FileText';
+          ? 'Image'
+          : 'FileText';
 
     const { wasabiKey } = await uploadFileToS3(req.file, 'resources');
 
@@ -190,7 +190,6 @@ export const uploadResource = async (req, res) => {
 
 /**
  * View resource - Proxy the file to avoid CORS issues
- * This serves the file directly through your backend
  */
 export const viewResource = async (req, res) => {
   try {
@@ -203,51 +202,51 @@ export const viewResource = async (req, res) => {
       });
     }
 
-    // For external links
+    // 🔗 External links (Link / Video)
     if (!resource.wasabiKey) {
       return res.json({
         success: true,
         externalLink: resource.externalLink || null,
-        type: 'external'
+        type: 'external',
       });
     }
 
-    // ✅ OPTION 1: Proxy the file (recommended for CORS issues)
-    if (req.query.proxy === 'true') {
+    // 🔥 PDF → ALWAYS PROXY (MOST IMPORTANT FIX)
+    if (resource.format === 'PDF' || req.query.proxy === 'true') {
       const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
-      
+
       res.set({
         'Content-Type': contentType,
         'Content-Disposition': 'inline',
         'Content-Length': buffer.length,
+        'Accept-Ranges': 'bytes',   // 🔥 THIS FIXES CHROME PDF
         'Cache-Control': 'public, max-age=31536000',
-        'Access-Control-Allow-Origin': '*',
       });
-      
+
+
       return res.send(buffer);
     }
 
-    // ✅ OPTION 2: Return signed URL
+    // 🖼️ Images / others → signed URL ok
     const url = await getSignedS3Url(resource.wasabiKey, 3600);
 
     return res.json({
       success: true,
       url,
       type: 'signed',
-      // Also provide proxy URL as fallback
-      proxyUrl: `${req.protocol}://${req.get('host')}/api/resources/${resource._id}/view?proxy=true`,
       format: resource.format,
-      mimeType: resource.mimeType
+      mimeType: resource.mimeType,
     });
   } catch (error) {
     console.error('❌ View error:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to view resource',
-      message: error.message
+      message: error.message,
     });
   }
 };
+
 
 /**
  * Download resource
@@ -265,13 +264,13 @@ export const downloadResource = async (req, res) => {
 
     // Proxy download
     const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
-    
+
     res.set({
       'Content-Type': contentType,
       'Content-Disposition': `attachment; filename="${resource.title}"`,
       'Content-Length': buffer.length,
     });
-    
+
     return res.send(buffer);
   } catch (error) {
     res.status(500).json({

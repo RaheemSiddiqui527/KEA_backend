@@ -1,24 +1,33 @@
+import mongoose from 'mongoose';
 import Group from '../models/group.models.js';
 
-// Get all groups with filters
+// Get all groups with filters (only approved or default groups)
 export const listGroups = async (req, res) => {
   try {
     const { category, search, type, page = 1, limit = 12 } = req.query;
     
-    const query = {};
+    // Only show approved groups or default groups
+    const query = {
+      $or: [
+        { isApproved: true },
+        { isDefault: true }
+      ],
+      isActive: true
+    };
     
     if (category && category !== 'All groups') {
       query.category = category;
     }
     
-    if (type) {
-      query.type = type;
+    if (type && type !== 'all') {
+      query.type = type.toLowerCase();
     }
     
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { description: { $regex: search, $options: 'i' } },
+        { discipline: { $regex: search, $options: 'i' } }
       ];
     }
     
@@ -26,7 +35,7 @@ export const listGroups = async (req, res) => {
     
     const groups = await Group.find(query)
       .populate('creator', 'name email')
-      .sort({ createdAt: -1 })
+      .sort({ isDefault: -1, createdAt: -1 }) // Show default groups first
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
@@ -56,9 +65,23 @@ export const listGroups = async (req, res) => {
 };
 
 // Get single group
+// Get single group
+// Get single group
 export const getGroup = async (req, res) => {
   try {
-    const group = await Group.findById(req.params.id)
+    // ✅ Validate ID parameter
+    const groupId = req.params.id;
+    
+    if (!groupId || groupId === 'undefined' || groupId === 'null') {
+      return res.status(400).json({ message: 'Invalid group ID' });
+    }
+
+    // ✅ Check if valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(groupId)) {
+      return res.status(400).json({ message: 'Invalid group ID format' });
+    }
+
+    const group = await Group.findById(groupId)
       .populate('creator', 'name email profile')
       .populate('members.user', 'name email profile')
       .populate('posts.author', 'name email profile')
@@ -68,6 +91,25 @@ export const getGroup = async (req, res) => {
     if (!group) {
       return res.status(404).json({ message: 'Group not found' });
     }
+
+    // ✅ Check if group is approved (unless it's default group)
+    if (!group.isApproved && !group.isDefault) {
+      // ✅ Allow creator and admins to view pending groups
+      const isCreator = group.creator._id.toString() === req.user?._id?.toString();
+      const isAdmin = req.user?.role === 'admin';
+      
+      if (!isCreator && !isAdmin) {
+        return res.status(403).json({ 
+          message: 'This group is pending approval',
+          approvalStatus: group.approvalStatus 
+        });
+      }
+    }
+
+    // ✅ Check if group is active
+    if (!group.isActive && req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'This group is not active' });
+    }
     
     res.json(group);
   } catch (err) {
@@ -75,25 +117,31 @@ export const getGroup = async (req, res) => {
     res.status(500).json({ message: 'Error fetching group', error: err.message });
   }
 };
-
-// Create group
+// Create group (ADMIN ONLY - or request system)
+// Create group (ADMIN ONLY - or request system)
 export const createGroup = async (req, res) => {
   try {
-    const { name, description, category, type, discipline, region } = req.body;
+    const { name, description, category, type, discipline, region, requestReason, estimatedMembers } = req.body;
     
-    if (!name || !description || !category) {
-      return res.status(400).json({ 
-        message: 'Name, description, and category are required' 
-      });
+    // Validate required fields
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Group name is required' });
     }
     
-    const group = new Group({
+    if (!description || !description.trim()) {
+      return res.status(400).json({ message: 'Group description is required' });
+    }
+
+    // Check if user is admin
+    const isAdmin = req.user.role === 'admin';
+
+    const groupData = {
       name: name.trim(),
       description: description.trim(),
-      category,
+      category: category || 'General',
       type: type || 'public',
-      discipline,
-      region,
+      discipline: discipline?.trim() || '',
+      region: region?.trim() || '',
       creator: req.user._id,
       admins: [req.user._id],
       members: [{
@@ -102,19 +150,178 @@ export const createGroup = async (req, res) => {
         joinedAt: new Date()
       }],
       posts: [],
-      resources: []
+      resources: [],
+      
+      // Approval fields
+      isDefault: false,
+      isApproved: isAdmin, // Auto-approve for admin
+      approvalStatus: isAdmin ? 'approved' : 'pending',
+      isActive: isAdmin, // Active only if admin created
+      
+      // Request fields (if user-created)
+      ...((!isAdmin && requestReason) && { requestReason }),
+      ...((!isAdmin && estimatedMembers) && { estimatedMembers })
+    };
+
+    // If admin created, add approval details
+    if (isAdmin) {
+      groupData.approvedBy = req.user._id;
+      groupData.approvedAt = new Date();
+    }
+    
+    const group = new Group(groupData);
+    await group.save();
+    
+    // ✅ Populate creator for response
+    const populatedGroup = await Group.findById(group._id)
+      .populate('creator', 'name email profile')
+      .lean();
+    
+    console.log('✅ Group created successfully:', populatedGroup._id);
+    
+    // ✅ IMPORTANT: Return group object with _id
+    if (isAdmin) {
+      res.status(201).json({
+        message: 'Group created successfully!',
+        group: populatedGroup
+      });
+    } else {
+      res.status(201).json({
+        message: 'Group request submitted! It will be reviewed by administrators.',
+        group: populatedGroup
+      });
+    }
+  } catch (err) {
+    console.error('❌ Error in createGroup:', err);
+    
+    // Handle validation errors
+    if (err.name === 'ValidationError') {
+      const errors = Object.values(err.errors).map(e => e.message);
+      return res.status(400).json({ 
+        message: 'Validation failed', 
+        errors 
+      });
+    }
+    
+    res.status(500).json({ message: 'Error creating group', error: err.message });
+  }
+};
+// Admin: Get all groups (including pending)
+export const getAllGroupsAdmin = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    
+    const query = {};
+    if (status) {
+      query.approvalStatus = status;
+    }
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const groups = await Group.find(query)
+      .populate('creator', 'name email profile')
+      .populate('approvedBy', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+    
+    const total = await Group.countDocuments(query);
+    
+    // Get counts for each status
+    const statusCounts = await Group.aggregate([
+      {
+        $group: {
+          _id: '$approvalStatus',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    res.json({
+      groups,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      },
+      statusCounts: statusCounts.reduce((acc, curr) => {
+        acc[curr._id] = curr.count;
+        return acc;
+      }, {})
     });
+  } catch (err) {
+    console.error('❌ Error in getAllGroupsAdmin:', err);
+    res.status(500).json({ message: 'Error fetching groups', error: err.message });
+  }
+};
+
+// Admin: Approve group
+export const approveGroup = async (req, res) => {
+  try {
+    const group = await Group.findById(req.params.id);
+    
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+    
+    group.isApproved = true;
+    group.isActive = true;
+    group.approvalStatus = 'approved';
+    group.approvedBy = req.user._id;
+    group.approvedAt = new Date();
+    group.rejectionReason = undefined;
     
     await group.save();
     
-    const populatedGroup = await Group.findById(group._id)
+    const updatedGroup = await Group.findById(group._id)
       .populate('creator', 'name email')
+      .populate('approvedBy', 'name email')
       .lean();
     
-    res.status(201).json(populatedGroup);
+    res.json({
+      message: 'Group approved successfully',
+      group: updatedGroup
+    });
   } catch (err) {
-    console.error('❌ Error in createGroup:', err);
-    res.status(500).json({ message: 'Error creating group', error: err.message });
+    console.error('❌ Error in approveGroup:', err);
+    res.status(500).json({ message: 'Error approving group', error: err.message });
+  }
+};
+
+// Admin: Reject group
+export const rejectGroup = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    
+    const group = await Group.findById(req.params.id);
+    
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+    
+    group.isApproved = false;
+    group.isActive = false;
+    group.approvalStatus = 'rejected';
+    group.rejectionReason = reason || 'Does not meet requirements';
+    group.approvedBy = req.user._id;
+    group.approvedAt = new Date();
+    
+    await group.save();
+    
+    const updatedGroup = await Group.findById(group._id)
+      .populate('creator', 'name email')
+      .populate('approvedBy', 'name email')
+      .lean();
+    
+    res.json({
+      message: 'Group rejected',
+      group: updatedGroup
+    });
+  } catch (err) {
+    console.error('❌ Error in rejectGroup:', err);
+    res.status(500).json({ message: 'Error rejecting group', error: err.message });
   }
 };
 
@@ -125,6 +332,11 @@ export const joinGroup = async (req, res) => {
     
     if (!group) {
       return res.status(404).json({ message: 'Group not found' });
+    }
+
+    // Check if group is approved
+    if (!group.isApproved && !group.isDefault) {
+      return res.status(403).json({ message: 'This group is not available yet' });
     }
     
     // Check if already a member
@@ -324,6 +536,15 @@ export const getCategoryStats = async (req, res) => {
   try {
     const stats = await Group.aggregate([
       {
+        $match: {
+          $or: [
+            { isApproved: true },
+            { isDefault: true }
+          ],
+          isActive: true
+        }
+      },
+      {
         $group: {
           _id: '$category',
           count: { $sum: 1 }
@@ -334,7 +555,13 @@ export const getCategoryStats = async (req, res) => {
       }
     ]);
     
-    const total = await Group.countDocuments();
+    const total = await Group.countDocuments({
+      $or: [
+        { isApproved: true },
+        { isDefault: true }
+      ],
+      isActive: true
+    });
     
     const categories = [
       { name: 'All groups', count: total },

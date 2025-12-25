@@ -1,7 +1,7 @@
 import express from 'express';
 import { auth } from '../middleware/auth.middleware.js';
 import {
-  listGroups,
+ listGroups,
   getGroup,
   createGroup,
   joinGroup,
@@ -18,6 +18,7 @@ const router = express.Router();
 router.get('/categories/stats', getCategoryStats);
 router.get('/', listGroups);
 router.get('/:id', getGroup);
+router.get('/:id', auth, getGroup);
 
 // Protected routes
 router.post('/', auth, createGroup);
