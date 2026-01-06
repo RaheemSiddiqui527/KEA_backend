@@ -56,6 +56,12 @@ const threadSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  status: {
+  type: String,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending",
+},
+
   lastActivity: {
     type: Date,
     default: Date.now

@@ -13,7 +13,7 @@ const router = express.Router();
 // Standard rate limiter for admin GET requests - 200 requests per 15 minutes
 const adminReadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 500,
   message: 'Too many requests from this admin account, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,
@@ -23,7 +23,7 @@ const adminReadLimiter = rateLimit({
 // Moderate rate limiter for admin write operations - 100 requests per 15 minutes
 const adminWriteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 300,
   message: 'Too many write operations, please slow down',
   standardHeaders: true,
   legacyHeaders: false,
@@ -32,7 +32,7 @@ const adminWriteLimiter = rateLimit({
 // Strict rate limiter for sensitive operations - 20 requests per 15 minutes
 const adminSensitiveLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 50,
   message: 'Too many sensitive operations, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
@@ -41,7 +41,7 @@ const adminSensitiveLimiter = rateLimit({
 // Very strict rate limiter for critical operations - 5 requests per 15 minutes
 const adminCriticalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 10,
   message: 'Critical operation limit reached, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,

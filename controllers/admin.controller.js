@@ -8,85 +8,271 @@ import Seminar from "../models/seminar.models.js";
 import Gallery from "../models/gallery.models.js";
 import Feedback from "../models/feedback.models.js";
 import Mentor from "../models/mentor.models.js";
-import Group from "../models/group.models.js";  
+import Thread from "../models/thread.models.js";
+import Group from "../models/group.models.js";
+import mongoose from "mongoose";
+
 
 const dashboardStats = async (req, res, next) => {
   try {
     const [
-      membersPending,
-      jobsPending,
-      blogsPending,
-      eventsPending,
-      galleryPending,
-      feedbackPending,
       totalMembers,
+      membersPending,
+      membersApproved,
+
       totalJobs,
+      jobsPending,
+      jobsApproved,
+
       totalBlogs,
+      blogsPending,
+      blogsApproved,
+
+      totalEvents,
+      eventsPending,
+      eventsApproved,
+
       totalGallery,
-      totalFeedback
+      galleryPending,
+      galleryApproved,
+
+      totalFeedback,
+      feedbackPending,
+      feedbackResolved,
+
+      totalGroups,
+      groupsPending,
+      groupsApproved,
+
+      totalThreads,
+
+      totalSeminars,
+      seminarsPending,
+      seminarsApproved,
+
+      totalTools,
+      toolsPending,
+      toolsApproved,
     ] = await Promise.all([
-      User.countDocuments({ membershipStatus: "pending" }),
-      Job.countDocuments({ status: "pending" }),
-      Blog.countDocuments({ status: "pending" }),
-      Event.countDocuments({ status: "pending" }),
-      Gallery.countDocuments({ isApproved: false }),
-      Feedback.countDocuments({ status: "pending" }),
       User.countDocuments(),
+      User.countDocuments({ membershipStatus: "pending" }),
+      User.countDocuments({ membershipStatus: "approved" }),
+
       Job.countDocuments(),
+      Job.countDocuments({ status: "pending" }),
+      Job.countDocuments({ status: "approved" }),
+
       Blog.countDocuments(),
+      Blog.countDocuments({ status: "pending" }),
+      Blog.countDocuments({ status: "approved" }),
+
+      Event.countDocuments(),
+      Event.countDocuments({ status: "pending" }),
+      Event.countDocuments({ status: "approved" }),
+
+      Gallery.countDocuments(),
+      Gallery.countDocuments({ isApproved: false }),
       Gallery.countDocuments({ isApproved: true }),
-      Feedback.countDocuments()
+
+      Feedback.countDocuments(),
+      Feedback.countDocuments({ status: "pending" }),
+      Feedback.countDocuments({ status: "resolved" }),
+
+      Group.countDocuments(),
+      Group.countDocuments({ status: "pending" }),
+      Group.countDocuments({ status: "approved" }),
+
+      Thread.countDocuments(),
+
+      Seminar.countDocuments(),
+      Seminar.countDocuments({ status: "pending" }),
+      Seminar.countDocuments({ status: "approved" }),
+
+      Tool.countDocuments(),
+      Tool.countDocuments({ status: "pending" }),
+      Tool.countDocuments({ status: "approved" }),
     ]);
 
-    // 🔥 RECENT ACTIVITIES
-    const recentMembers = await User.find()
-      .sort({ createdAt: -1 })
-      .limit(2)
-      .select("name createdAt");
-
-    const recentJobs = await Job.find()
-      .sort({ createdAt: -1 })
-      .limit(2)
-      .select("title createdAt");
-
-    const recentGallery = await Gallery.find()
-      .sort({ createdAt: -1 })
-      .limit(2)
-      .select("title createdAt");
+    /* ======================
+       🔥 ACTIVITY LOG
+    ====================== */
+    const [recentUsers, recentJobs, recentBlogs, recentThreads] =
+      await Promise.all([
+        User.find().sort({ createdAt: -1 }).limit(3).select("name createdAt"),
+        Job.find().sort({ createdAt: -1 }).limit(3).select("title createdAt"),
+        Blog.find().sort({ createdAt: -1 }).limit(3).select("title createdAt"),
+        Thread.find().sort({ createdAt: -1 }).limit(3).select("title createdAt"),
+      ]);
 
     const activities = [
-      ...recentMembers.map(m => ({
+      ...recentUsers.map(u => ({
         title: "New member joined",
-        time: m.createdAt,
-        description: m.name
+        description: u.name,
+        time: u.createdAt,
       })),
       ...recentJobs.map(j => ({
         title: "New job posted",
+        description: j.title,
         time: j.createdAt,
-        description: j.title
       })),
-      ...recentGallery.map(g => ({
-        title: "New photo uploaded",
-        time: g.createdAt,
-        description: g.title
-      }))
-    ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 10);
+      ...recentBlogs.map(b => ({
+        title: "New blog published",
+        description: b.title,
+        time: b.createdAt,
+      })),
+      ...recentThreads.map(t => ({
+        title: "New forum thread created",
+        description: t.title,
+        time: t.createdAt,
+      })),
+    ].sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    /* ======================
+       📈 MEMBERS GROWTH (30 DAYS)
+    ====================== */
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
+
+    const membersGrowth = await User.aggregate([
+      {
+        $match: { createdAt: { $gte: last30Days } },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          date: "$_id",
+          count: 1,
+          _id: 0,
+        },
+      },
+    ]);
 
     res.json({
       stats: {
-        totalMembers,
-        pendingApprovals: membersPending + jobsPending + blogsPending + eventsPending + galleryPending + feedbackPending,
-        totalJobs,
-        blogs: totalBlogs,
-        gallery: totalGallery,
-        feedback: totalFeedback
+        members: { total: totalMembers, approved: membersApproved, pending: membersPending },
+        jobs: { total: totalJobs, approved: jobsApproved, pending: jobsPending },
+        blogs: { total: totalBlogs, approved: blogsApproved, pending: blogsPending },
+        events: { total: totalEvents, approved: eventsApproved, pending: eventsPending },
+        gallery: { total: totalGallery, approved: galleryApproved, pending: galleryPending },
+        feedback: { total: totalFeedback, resolved: feedbackResolved, pending: feedbackPending },
+        groups: { total: totalGroups, approved: groupsApproved, pending: groupsPending },
+        forums: { total: totalThreads, approved: totalThreads, pending: 0 },
+        seminars: { total: totalSeminars, approved: seminarsApproved, pending: seminarsPending },
+        tools: { total: totalTools, approved: toolsApproved, pending: toolsPending },
       },
       activities,
+      chartData: membersGrowth,
     });
   } catch (err) {
     next(err);
   }
 };
+
+const getAdminStats = async (req, res, next) => {
+  try {
+    const [
+      totalMembers,
+      membersApproved,
+      membersPending,
+
+      totalJobs,
+      jobsApproved,
+      jobsPending,
+
+      totalBlogs,
+      blogsApproved,
+      blogsPending,
+
+      totalEvents,
+      eventsApproved,
+      eventsPending,
+
+      totalGallery,
+      galleryApproved,
+      galleryPending,
+
+      totalFeedback,
+      feedbackResolved,
+      feedbackPending,
+
+      totalTools,
+      toolsApproved,
+      toolsPending,
+
+      totalResources,
+      resourcesApproved,
+      resourcesPending,
+
+      totalSeminars,
+      seminarsApproved,
+      seminarsPending,
+
+      totalThreads,
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ membershipStatus: "active" }),
+      User.countDocuments({ membershipStatus: "pending" }),
+
+      Job.countDocuments(),
+      Job.countDocuments({ status: "approved" }),
+      Job.countDocuments({ status: "pending" }),
+
+      Blog.countDocuments(),
+      Blog.countDocuments({ status: "published" }),
+      Blog.countDocuments({ status: "pending" }),
+
+      Event.countDocuments(),
+      Event.countDocuments({ status: "approved" }),
+      Event.countDocuments({ status: "pending" }),
+
+      Gallery.countDocuments(),
+      Gallery.countDocuments({ isApproved: true }),
+      Gallery.countDocuments({ isApproved: false }),
+
+      Feedback.countDocuments(),
+      Feedback.countDocuments({ status: "resolved" }),
+      Feedback.countDocuments({ status: "pending" }),
+
+      Tool.countDocuments(),
+      Tool.countDocuments({ status: "approved" }),
+      Tool.countDocuments({ status: "pending" }),
+
+      Resource.countDocuments(),
+      Resource.countDocuments({ status: "approved" }),
+      Resource.countDocuments({ status: "pending" }),
+
+      Seminar.countDocuments(),
+      Seminar.countDocuments({ status: "approved" }),
+      Seminar.countDocuments({ status: "pending" }),
+
+      Thread.countDocuments(),
+    ]);
+
+    res.json({
+      members: { total: totalMembers, approved: membersApproved, pending: membersPending },
+      jobs: { total: totalJobs, approved: jobsApproved, pending: jobsPending },
+      blogs: { total: totalBlogs, approved: blogsApproved, pending: blogsPending },
+      events: { total: totalEvents, approved: eventsApproved, pending: eventsPending },
+      gallery: { total: totalGallery, approved: galleryApproved, pending: galleryPending },
+      feedback: { total: totalFeedback, resolved: feedbackResolved, pending: feedbackPending },
+      tools: { total: totalTools, approved: toolsApproved, pending: toolsPending },
+      resources: { total: totalResources, approved: resourcesApproved, pending: resourcesPending },
+      seminars: { total: totalSeminars, approved: seminarsApproved, pending: seminarsPending },
+      forums: { total: totalThreads, approved: totalThreads, pending: 0 },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 // Members
 const getMemberById = async (req, res, next) => {
@@ -329,17 +515,17 @@ const getAllGallery = async (req, res, next) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
     const query = {};
-    
+
     if (category && category !== 'All photos') {
       query.category = category;
     }
-    
+
     if (search) {
       query.$text = { $search: search };
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const [items, total] = await Promise.all([
       Gallery.find(query)
         .populate('uploadedBy', 'name email')
@@ -348,7 +534,7 @@ const getAllGallery = async (req, res, next) => {
         .limit(parseInt(limit)),
       Gallery.countDocuments(query)
     ]);
-    
+
     res.json({
       items,
       pagination: {
@@ -381,7 +567,7 @@ const approveGallery = async (req, res, next) => {
       { isApproved: true },
       { new: true, runValidators: false }
     ).populate('uploadedBy', 'name email');
-    
+
     if (!item) return res.status(404).json({ message: "Gallery item not found" });
     res.json(item);
   } catch (err) {
@@ -416,17 +602,17 @@ const getAllFeedback = async (req, res, next) => {
   try {
     const { status, category, page = 1, limit = 20 } = req.query;
     const query = {};
-    
+
     if (status) {
       query.status = status;
     }
-    
+
     if (category) {
       query.category = category;
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const [feedbacks, total] = await Promise.all([
       Feedback.find(query)
         .populate('user', 'name email')
@@ -436,7 +622,7 @@ const getAllFeedback = async (req, res, next) => {
         .limit(parseInt(limit)),
       Feedback.countDocuments(query)
     ]);
-    
+
     res.json({
       feedbacks,
       pagination: {
@@ -456,7 +642,7 @@ const getFeedbackById = async (req, res, next) => {
     const feedback = await Feedback.findById(req.params.id)
       .populate('user', 'name email profile')
       .populate('adminResponse.respondedBy', 'name email');
-    
+
     if (!feedback) return res.status(404).json({ message: "Feedback not found" });
     res.json(feedback);
   } catch (err) {
@@ -478,9 +664,9 @@ const pendingFeedback = async (req, res, next) => {
 const updateFeedbackStatus = async (req, res, next) => {
   try {
     const { status, response } = req.body;
-    
+
     const updateData = { status };
-    
+
     if (response) {
       updateData.adminResponse = {
         message: response,
@@ -488,15 +674,15 @@ const updateFeedbackStatus = async (req, res, next) => {
         respondedAt: new Date()
       };
     }
-    
+
     const feedback = await Feedback.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: false }
     )
-    .populate('user', 'name email')
-    .populate('adminResponse.respondedBy', 'name email');
-    
+      .populate('user', 'name email')
+      .populate('adminResponse.respondedBy', 'name email');
+
     if (!feedback) return res.status(404).json({ message: "Feedback not found" });
     res.json(feedback);
   } catch (err) {
@@ -521,17 +707,17 @@ const getAllTools = async (req, res, next) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
     const query = {};
-    
+
     if (category && category !== 'All tools') {
       query.category = category;
     }
-    
+
     if (search) {
       query.$text = { $search: search };
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const [tools, total] = await Promise.all([
       Tool.find(query)
         .populate('addedBy', 'name email')
@@ -540,7 +726,7 @@ const getAllTools = async (req, res, next) => {
         .limit(parseInt(limit)),
       Tool.countDocuments(query)
     ]);
-    
+
     res.json({
       tools,
       pagination: {
@@ -582,17 +768,17 @@ const getAllResources = async (req, res, next) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
     const query = {};
-    
+
     if (category && category !== 'All resources') {
       query.category = category;
     }
-    
+
     if (search) {
       query.$text = { $search: search };
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const [resources, total] = await Promise.all([
       Resource.find(query)
         .populate('addedBy', 'name email')
@@ -601,7 +787,7 @@ const getAllResources = async (req, res, next) => {
         .limit(parseInt(limit)),
       Resource.countDocuments(query)
     ]);
-    
+
     res.json({
       resources,
       pagination: {
@@ -643,17 +829,17 @@ const getAllSeminars = async (req, res, next) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
     const query = {};
-    
+
     if (category && category !== 'All') {
       query.category = category;
     }
-    
+
     if (search) {
       query.$text = { $search: search };
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const [seminars, total] = await Promise.all([
       Seminar.find(query)
         .populate('attendees', 'name email')
@@ -663,7 +849,7 @@ const getAllSeminars = async (req, res, next) => {
         .limit(parseInt(limit)),
       Seminar.countDocuments(query)
     ]);
-    
+
     res.json({
       seminars,
       pagination: {
@@ -740,48 +926,7 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-const getAdminStats = async (req, res, next) => {
-  try {
-    const [
-      membersApproved, 
-      jobsApproved, 
-      blogsApproved, 
-      eventsApproved,
-      galleryApproved,
-      feedbackResolved,
-      totalTools,
-      totalResources,
-      totalSeminars
-    ] = await Promise.all([
-      User.countDocuments({ membershipStatus: "active" }),
-      Job.countDocuments({ status: "approved" }),
-      Blog.countDocuments({ status: "published" }),
-      Event.countDocuments({ status: "approved" }),
-      Gallery.countDocuments({ isApproved: true }),
-      Feedback.countDocuments({ status: "resolved" }),
-      Tool.countDocuments(),
-      Resource.countDocuments(),
-      Seminar.countDocuments(),
-    ]);
 
-    const totalReviews = membersApproved + jobsApproved + blogsApproved + eventsApproved + galleryApproved;
-
-    res.json({
-      membersApproved,
-      jobsApproved,
-      blogsApproved,
-      eventsApproved,
-      galleryApproved,
-      feedbackResolved,
-      totalReviews,
-      totalTools,
-      totalResources,
-      totalSeminars,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
 
 // Settings & Backup
 const getSettings = async (req, res, next) => {
@@ -886,17 +1031,17 @@ const getAllGroups = async (req, res, next) => {
   try {
     const { status, category, search, page = 1, limit = 20 } = req.query;
     const query = {};
-    
+
     // Filter by approval status
     if (status) {
       query.approvalStatus = status;
     }
-    
+
     // Filter by category
     if (category && category !== 'All') {
       query.category = category;
     }
-    
+
     // Search functionality
     if (search) {
       query.$or = [
@@ -905,9 +1050,9 @@ const getAllGroups = async (req, res, next) => {
         { discipline: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     const [groups, total] = await Promise.all([
       Group.find(query)
         .populate('creator', 'name email profile')
@@ -917,7 +1062,7 @@ const getAllGroups = async (req, res, next) => {
         .limit(parseInt(limit)),
       Group.countDocuments(query)
     ]);
-    
+
     // Get status counts
     const statusCounts = await Group.aggregate([
       {
@@ -927,7 +1072,7 @@ const getAllGroups = async (req, res, next) => {
         }
       }
     ]);
-    
+
     res.json({
       groups,
       pagination: {
@@ -952,11 +1097,11 @@ const getGroupById = async (req, res, next) => {
       .populate('creator', 'name email profile')
       .populate('approvedBy', 'name email')
       .populate('members.user', 'name email profile');
-    
+
     if (!group) {
       return res.status(404).json({ message: "Group not found" });
     }
-    
+
     res.json(group);
   } catch (err) {
     next(err);
@@ -968,7 +1113,7 @@ const pendingGroups = async (req, res, next) => {
     const groups = await Group.find({ approvalStatus: 'pending' })
       .populate('creator', 'name email profile')
       .sort({ createdAt: -1 });
-    
+
     res.json(groups);
   } catch (err) {
     next(err);
@@ -978,24 +1123,24 @@ const pendingGroups = async (req, res, next) => {
 const approveGroup = async (req, res, next) => {
   try {
     const group = await Group.findById(req.params.id);
-    
+
     if (!group) {
       return res.status(404).json({ message: "Group not found" });
     }
-    
+
     group.isApproved = true;
     group.isActive = true;
     group.approvalStatus = 'approved';
     group.approvedBy = req.user._id;
     group.approvedAt = new Date();
     group.rejectionReason = undefined;
-    
+
     await group.save();
-    
+
     const updatedGroup = await Group.findById(group._id)
       .populate('creator', 'name email')
       .populate('approvedBy', 'name email');
-    
+
     res.json(updatedGroup);
   } catch (err) {
     next(err);
@@ -1005,26 +1150,26 @@ const approveGroup = async (req, res, next) => {
 const rejectGroup = async (req, res, next) => {
   try {
     const { reason } = req.body;
-    
+
     const group = await Group.findById(req.params.id);
-    
+
     if (!group) {
       return res.status(404).json({ message: "Group not found" });
     }
-    
+
     group.isApproved = false;
     group.isActive = false;
     group.approvalStatus = 'rejected';
     group.rejectionReason = reason || 'Does not meet requirements';
     group.approvedBy = req.user._id;
     group.approvedAt = new Date();
-    
+
     await group.save();
-    
+
     const updatedGroup = await Group.findById(group._id)
       .populate('creator', 'name email')
       .populate('approvedBy', 'name email');
-    
+
     res.json(updatedGroup);
   } catch (err) {
     next(err);
@@ -1034,11 +1179,11 @@ const rejectGroup = async (req, res, next) => {
 const deleteGroup = async (req, res, next) => {
   try {
     const group = await Group.findByIdAndDelete(req.params.id);
-    
+
     if (!group) {
       return res.status(404).json({ message: "Group not found" });
     }
-    
+
     res.json({ message: "Group deleted successfully" });
   } catch (err) {
     next(err);
