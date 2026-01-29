@@ -24,6 +24,7 @@ export const register = async (req, res, next) => {
       password,
       role, 
       profile,
+      category,
       membershipStatus
     } = req.body;
 
@@ -48,6 +49,10 @@ export const register = async (req, res, next) => {
         bio: profile?.bio || "",
         phone: profile?.phone || "",
         location: profile?.location || "",
+          category: profile?.category || "Other",
+          company: profile?.company || "",        // ✅ REQUIRED
+        position: profile?.position || "",      // ✅ REQUIRED
+        yearsOfExperience: profile?.yearsOfExperience || "",
         skills: profile?.skills || [],
         education: profile?.education || [],
         experience: profile?.experience || [],

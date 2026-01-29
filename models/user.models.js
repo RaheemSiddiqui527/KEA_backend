@@ -1,6 +1,24 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+/* ===============================
+   CATEGORY ENUM
+================================ */
+const categories = [
+  "Software Engineering",
+  "Civil Engineering",
+  "Mechanical Engineering",
+  "Electrical Engineering",
+  "Electronics Engineering",
+  "Chemical Engineering",
+  "Computer Engineering",
+  "Architecture",
+  "Other",
+];
+
+/* ===============================
+   SUB SCHEMAS
+================================ */
 const EducationSchema = new mongoose.Schema(
   {
     institution: String,
@@ -22,16 +40,38 @@ const ExperienceSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/* ===============================
+   PROFILE SCHEMA (UPDATED)
+================================ */
 const ProfileSchema = new mongoose.Schema(
   {
     headline: String,
     bio: String,
     phone: String,
     location: String,
+
+    category: {
+      type: String,
+      enum: categories,      // ✅ category added
+      default: "Other",
+    },
+
     skills: [String],
     education: [EducationSchema],
     experience: [ExperienceSchema],
-    position: String, // ✅ REQUIRED
+
+    position: {
+      type: String,
+      required: true,
+    },
+
+    company: {
+      type: String,
+      required: true,
+    },
+
+    yearsOfExperience: String,
+
     socialLinks: {
       linkedin: String,
       twitter: String,
@@ -39,13 +79,15 @@ const ProfileSchema = new mongoose.Schema(
       instagram: String,
       website: String,
     },
-    company: String, // ✅ REQUIRED
-    yearsOfExperience: String, // ✅ REQUIRED
+
     avatar: String,
   },
   { _id: false }
 );
 
+/* ===============================
+   USER SCHEMA
+================================ */
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -74,19 +116,17 @@ const UserSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-/*  
-===========================================================
-  SINGLE PRE-SAVE HOOK  (Correct)
-===========================================================
-*/
+/* ===============================
+   PRE-SAVE HOOK
+================================ */
 UserSchema.pre("save", async function () {
-  // 1️⃣ Hash password
+  // Hash password
   if (this.isModified("password")) {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
   }
 
-  // 2️⃣ Generate Member ID for new users
+  // Generate Member ID
   if (this.isNew && !this.memberId) {
     const lastUser = await this.constructor.findOne(
       { memberId: { $exists: true } },
@@ -95,7 +135,6 @@ UserSchema.pre("save", async function () {
     );
 
     let nextNumber = 1;
-
     if (lastUser?.memberId) {
       const lastNum = parseInt(lastUser.memberId.replace("KEA-", ""));
       nextNumber = lastNum + 1;
@@ -105,7 +144,9 @@ UserSchema.pre("save", async function () {
   }
 });
 
-// Compare password
+/* ===============================
+   METHODS
+================================ */
 UserSchema.methods.comparePassword = function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
