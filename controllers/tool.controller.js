@@ -4,34 +4,43 @@ import Tool from '../models/tool.models.js';
 export const getAllTools = async (req, res, next) => {
   try {
     const { category, search, page = 1, limit = 12 } = req.query;
-    
-    const query = {};
-    
+
+    const query = {
+      isApproved: true // 🔒 DEFAULT: only approved
+    };
+
+    // Admin can see everything
+    if (req.user?.role === 'admin') {
+      delete query.isApproved;
+    }
+
     if (category && category !== 'All tools') {
       query.category = category;
     }
-    
+
     if (search) {
       query.$text = { $search: search };
     }
-    
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
     const [tools, total] = await Promise.all([
       Tool.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(limitNum),
       Tool.countDocuments(query)
     ]);
-    
+
     res.json({
       tools,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {
@@ -55,19 +64,35 @@ export const getToolById = async (req, res, next) => {
 };
 
 // Create tool
+// Create tool (pending admin approval)
 export const createTool = async (req, res, next) => {
   try {
     const toolData = {
       ...req.body,
-      addedBy: req.user._id
+      addedBy: req.user._id,
+      isApproved: false // 🔒 IMPORTANT
     };
-    
+
     const tool = await Tool.create(toolData);
-    res.status(201).json(tool);
+
+    // (Optional) Notify admin
+    await createAdminNotification({
+      type: 'tool',
+      title: 'New Tool Added',
+      message: `"${tool.name}" is pending approval`,
+      relatedId: tool._id,
+      relatedModel: 'Tool'
+    });
+
+    // ⚠️ Do NOT expose tool data publicly
+    res.status(201).json({
+      message: 'Tool created and awaiting admin approval'
+    });
   } catch (error) {
     next(error);
   }
 };
+
 
 // Update tool
 export const updateTool = async (req, res, next) => {
@@ -103,33 +128,43 @@ export const deleteTool = async (req, res, next) => {
   }
 };
 
-// Get category stats
+// Get category stats (SECURE)
 export const getCategoryStats = async (req, res, next) => {
   try {
+    const isAdmin = req.user?.role === 'admin';
+
+    // 🔒 Default filter
+    const matchStage = isAdmin
+      ? {} // admin sees all
+      : { isApproved: true }; // public sees approved only
+
     const stats = await Tool.aggregate([
+      { $match: matchStage },
       {
         $group: {
           _id: '$category',
           count: { $sum: 1 }
         }
       },
-      {
-        $sort: { count: -1 }
-      }
+      { $sort: { count: -1 } }
     ]);
-    
-    const total = await Tool.countDocuments();
-    
+
+    const total = await Tool.countDocuments(matchStage);
+
     const categories = [
       { name: 'All tools', count: total },
-      ...stats.map(s => ({ name: s._id, count: s.count }))
+      ...stats.map(s => ({
+        name: s._id,
+        count: s.count
+      }))
     ];
-    
+
     res.json({ categories });
   } catch (error) {
     next(error);
   }
 };
+
 
 // Increment download count
 export const incrementDownloads = async (req, res, next) => {

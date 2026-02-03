@@ -52,52 +52,75 @@ export const listGallery = async (req, res) => {
   }
 };
 
-// Get single gallery item
+
+// Get single gallery item (SECURE)
 export const getGalleryItem = async (req, res) => {
   try {
     const item = await Gallery.findById(req.params.id)
       .populate('uploadedBy', 'name email profile')
       .populate('comments.user', 'name email')
       .lean();
-    
+
     if (!item) {
       return res.status(404).json({ message: 'Gallery item not found' });
     }
-    
+
+    const isAdmin = req.user?.role === 'admin';
+
+    // 🚫 Block access if not approved and not admin
+    if (!item.isApproved && !isAdmin) {
+      return res.status(403).json({
+        message: 'This gallery item is pending admin approval'
+      });
+    }
+
     res.json(item);
   } catch (err) {
     console.error('❌ Error in getGalleryItem:', err);
-    res.status(500).json({ message: 'Error fetching gallery item', error: err.message });
+    res.status(500).json({
+      message: 'Error fetching gallery item',
+      error: err.message
+    });
   }
 };
 
+
+// Upload gallery item
 // Upload gallery item
 export const uploadGalleryItem = async (req, res) => {
   try {
     const itemData = {
       ...req.body,
       uploadedBy: req.user._id,
-      tags: req.body.tags ? req.body.tags.split(',').map(t => t.trim()) : [],
+      tags: req.body.tags
+        ? req.body.tags.split(',').map(t => t.trim())
+        : [],
       isApproved: false
     };
-    
+
     const item = await Gallery.create(itemData);
-    
-    // Notify admins
+
     await createAdminNotification({
       type: 'gallery',
       title: 'New Gallery Upload',
-      message: `${item.title} is pending approval`,
+      message: `"${item.title}" is pending approval`,
       relatedId: item._id,
       relatedModel: 'Gallery'
     });
-    
-    res.status(201).json(item);
+
+    // ⚠️ Do NOT expose item publicly
+    res.status(201).json({
+      message: 'Gallery item uploaded and awaiting approval'
+    });
   } catch (err) {
     console.error('❌ Error in uploadGalleryItem:', err);
-    res.status(500).json({ message: 'Error uploading item', error: err.message });
+    res.status(500).json({
+      message: 'Error uploading item',
+      error: err.message
+    });
   }
 };
+
 
 // Like gallery item
 export const likeGalleryItem = async (req, res) => {
@@ -182,32 +205,43 @@ export const deleteGalleryItem = async (req, res) => {
   }
 };
 
-// Get category stats
+// Get gallery category stats (SECURE)
 export const getCategoryStats = async (req, res) => {
   try {
+    const isAdmin = req.user?.role === 'admin';
+
+    // 🔒 Default filter
+    const matchStage = isAdmin
+      ? {} // admin sees approved + pending
+      : { isApproved: true }; // public sees approved only
+
     const stats = await Gallery.aggregate([
-      { $match: { isApproved: true } },
+      { $match: matchStage },
       {
         $group: {
           _id: '$category',
           count: { $sum: 1 }
         }
       },
-      {
-        $sort: { count: -1 }
-      }
+      { $sort: { count: -1 } }
     ]);
-    
-    const total = await Gallery.countDocuments({ isApproved: true });
-    
+
+    const total = await Gallery.countDocuments(matchStage);
+
     const categories = [
       { name: 'All photos', count: total },
-      ...stats.map(s => ({ name: s._id, count: s.count }))
+      ...stats.map(s => ({
+        name: s._id,
+        count: s.count
+      }))
     ];
-    
+
     res.json({ categories });
   } catch (err) {
     console.error('❌ Error in getCategoryStats:', err);
-    res.status(500).json({ message: 'Error fetching stats', error: err.message });
+    res.status(500).json({
+      message: 'Error fetching stats',
+      error: err.message
+    });
   }
 };

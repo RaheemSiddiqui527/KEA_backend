@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../models/user.models.js";
+import { sendRegistrationEmail, sendApprovalEmail, sendRejectionEmail } from "../utils/emailService.js";
 
 // ---------------------------------------
 // Generate JWT Token
@@ -14,7 +15,7 @@ const signToken = (user) => {
 };
 
 // ---------------------------------------
-// REGISTER USER
+// REGISTER USER (with email notification)
 // ---------------------------------------
 export const register = async (req, res, next) => {
   try {
@@ -49,24 +50,34 @@ export const register = async (req, res, next) => {
         bio: profile?.bio || "",
         phone: profile?.phone || "",
         location: profile?.location || "",
-          category: profile?.category || "Other",
-          company: profile?.company || "",        // ✅ REQUIRED
-        position: profile?.position || "",      // ✅ REQUIRED
+        category: profile?.category || "Other",
+        company: profile?.company || "",
+        position: profile?.position || "",
         yearsOfExperience: profile?.yearsOfExperience || "",
         skills: profile?.skills || [],
         education: profile?.education || [],
         experience: profile?.experience || [],
+        references: profile?.references || [], // ✅ NOW SAVING REFERENCES
         avatar: profile?.avatar || ""
       },
 
       membershipStatus: membershipStatus || "pending"
     });
 
-    // 4️⃣ Generate JWT token
+    // 4️⃣ Send registration confirmation email
+    try {
+      await sendRegistrationEmail(email, name);
+      console.log('✅ Registration email sent to:', email);
+    } catch (emailError) {
+      console.error('❌ Failed to send registration email:', emailError);
+      // Don't fail registration if email fails
+    }
+
+    // 5️⃣ Generate JWT token
     const token = signToken(user);
 
     res.status(201).json({
-      message: "Registration successful",
+      message: "Registration successful. Check your email for confirmation.",
       token,
       user,
     });
@@ -185,6 +196,79 @@ export const resetPassword = async (req, res, next) => {
       token: jwtToken,
       user,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------------------------------------
+// APPROVE USER (admin only - with email notification)
+// ---------------------------------------
+export const approveUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    // Find user and update membership status
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { membershipStatus: 'approved' },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Send approval email
+    try {
+      await sendApprovalEmail(user.email, user.name);
+      console.log('✅ Approval email sent to:', user.email);
+    } catch (emailError) {
+      console.error('❌ Failed to send approval email:', emailError);
+      // Don't fail approval if email fails
+    }
+
+    res.status(200).json({
+      message: 'User approved successfully. Approval email sent.',
+      user,
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------------------------------------
+// REJECT USER (admin only - with email notification)
+// ---------------------------------------
+export const rejectUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { membershipStatus: 'rejected' },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Send rejection email with reason
+    try {
+      await sendRejectionEmail(user.email, user.name, reason);
+      console.log('✅ Rejection email sent to:', user.email);
+    } catch (emailError) {
+      console.error('❌ Failed to send rejection email:', emailError);
+    }
+
+    res.status(200).json({
+      message: 'User membership rejected. Notification email sent.',
+      user,
+    });
+
   } catch (err) {
     next(err);
   }

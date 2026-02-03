@@ -303,33 +303,77 @@ const pendingMembers = async (req, res, next) => {
   }
 };
 
-const approveMember = async (req, res, next) => {
+ const approveMember = async (req, res, next) => {
   try {
+    const { id } = req.params;
+
+    // Find user and update membership status to 'active'
     const member = await User.findByIdAndUpdate(
-      req.params.id,
-      { membershipStatus: "active" },
+      id,
+      { membershipStatus: 'active' },
       { new: true }
-    );
-    if (!member) return res.status(404).json({ message: "Member not found" });
+    ).select('-password'); // Don't return password
+
+    if (!member) {
+      return res.status(404).json({ message: 'Member not found' });
+    }
+
+    // Send approval email
+    try {
+      await sendApprovalEmail(member.email, member.name);
+      console.log('✅ Approval email sent to:', member.email);
+    } catch (emailError) {
+      console.error('❌ Failed to send approval email:', emailError);
+      // Don't fail approval if email fails - just log it
+    }
+
     res.json(member);
+
   } catch (err) {
+    console.error('Error approving member:', err);
     next(err);
   }
 };
 
+// ---------------------------------------
+// REJECT MEMBER (with email notification)
+// ---------------------------------------
 const rejectMember = async (req, res, next) => {
   try {
+    const { id } = req.params;
+    const { reason } = req.body; // Optional rejection reason
+
+    // Find user and update membership status to 'inactive'
     const member = await User.findByIdAndUpdate(
-      req.params.id,
-      { membershipStatus: "inactive" },
+      id,
+      { 
+        membershipStatus: 'inactive',
+        rejectionReason: reason || '' // Save rejection reason if provided
+      },
       { new: true }
-    );
-    if (!member) return res.status(404).json({ message: "Member not found" });
+    ).select('-password');
+
+    if (!member) {
+      return res.status(404).json({ message: 'Member not found' });
+    }
+
+    // Send rejection email with reason
+    try {
+      await sendRejectionEmail(member.email, member.name, reason);
+      console.log('✅ Rejection email sent to:', member.email);
+    } catch (emailError) {
+      console.error('❌ Failed to send rejection email:', emailError);
+      // Don't fail rejection if email fails
+    }
+
     res.json(member);
+
   } catch (err) {
+    console.error('Error rejecting member:', err);
     next(err);
   }
 };
+
 
 // Jobs
 const getAllJobs = async (req, res, next) => {
