@@ -761,13 +761,18 @@ const deleteTool = async (req, res, next) => {
   }
 };
 
+
 // =====================
 // RESOURCES (KNOWLEDGE HUB) MANAGEMENT
 // =====================
-const getAllResources = async (req, res, next) => {
+
+/**
+ * Get all resources (Public/User view)
+ */
+export const getAllResources = async (req, res, next) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
-    const query = {};
+    const query = { status: 'approved' }; // Only show approved resources to public
 
     if (category && category !== 'All resources') {
       query.category = category;
@@ -781,7 +786,7 @@ const getAllResources = async (req, res, next) => {
 
     const [resources, total] = await Promise.all([
       Resource.find(query)
-        .populate('addedBy', 'name email')
+        .populate('submittedBy', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit)),
@@ -802,26 +807,269 @@ const getAllResources = async (req, res, next) => {
   }
 };
 
-const getResourceById = async (req, res, next) => {
+/**
+ * Get resource by ID
+ */
+export const getResourceById = async (req, res, next) => {
   try {
-    const resource = await Resource.findById(req.params.id).populate('addedBy', 'name email');
-    if (!resource) return res.status(404).json({ message: "Resource not found" });
-    res.json(resource);
+    const resource = await Resource.findById(req.params.id)
+      .populate('submittedBy', 'name email');
+    
+    if (!resource) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Resource not found" 
+      });
+    }
+    
+    res.json({
+      success: true,
+      resource
+    });
   } catch (err) {
     next(err);
   }
 };
 
-const deleteResource = async (req, res, next) => {
+/**
+ * Delete resource
+ */
+export const deleteResource = async (req, res, next) => {
   try {
     const resource = await Resource.findByIdAndDelete(req.params.id);
-    if (!resource) return res.status(404).json({ message: "Resource not found" });
-    res.json({ message: "Resource deleted successfully" });
+    
+    if (!resource) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Resource not found" 
+      });
+    }
+    
+    res.json({ 
+      success: true,
+      message: "Resource deleted successfully" 
+    });
   } catch (err) {
     next(err);
   }
 };
 
+// ======================================================
+// ================= ADMIN CONTROLLERS ==================
+// ======================================================
+
+/**
+ * ADMIN: Get all resources (with status, category, search)
+ */
+export const adminGetAllResources = async (req, res) => {
+  try {
+    const {
+      status,
+      category,
+      search,
+      page = 1,
+      limit = 10
+    } = req.query;
+
+    const query = {};
+
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    if (category && category !== 'all' && category !== 'All resources') {
+      query.category = category;
+    }
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $regex: search, $options: 'i' } },
+        { author: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [resources, total] = await Promise.all([
+      Resource.find(query)
+        .populate('submittedBy', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      Resource.countDocuments(query)
+    ]);
+
+    res.json({
+      success: true,
+      resources,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Admin Get All Resources Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch admin resources',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * ADMIN: Resource stats (dashboard cards)
+ */
+export const adminGetStats = async (req, res) => {
+  try {
+    const [total, pending, approved, rejected] = await Promise.all([
+      Resource.countDocuments(),
+      Resource.countDocuments({ status: 'pending' }),
+      Resource.countDocuments({ status: 'approved' }),
+      Resource.countDocuments({ status: 'rejected' })
+    ]);
+
+    res.json({
+      success: true,
+      stats: {
+        total,
+        pending,
+        approved,
+        rejected
+      }
+    });
+  } catch (error) {
+    console.error('Admin Get Stats Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch stats',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * ADMIN: Get category statistics
+ * This endpoint provides counts per category for the filter dropdown
+ */
+export const adminGetCategoryStats = async (req, res) => {
+  try {
+    // Get count per category using aggregation
+    const categories = await Resource.aggregate([
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    // Get total count for "All resources" option
+    const totalCount = await Resource.countDocuments();
+
+    // Format response with "All resources" option first
+    const formattedCategories = [
+      { name: 'All resources', count: totalCount },
+      ...categories.map(cat => ({
+        name: cat._id,
+        count: cat.count
+      }))
+    ];
+
+    res.json({
+      success: true,
+      categories: formattedCategories
+    });
+  } catch (error) {
+    console.error('Admin Get Category Stats Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch category stats',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * ADMIN: Approve resource
+ */
+export const approveResource = async (req, res) => {
+  try {
+    const resource = await Resource.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: 'approved',
+        rejectionReason: null
+      },
+      { new: true }
+    ).populate('submittedBy', 'name email');
+
+    if (!resource) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Resource not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Resource approved successfully',
+      resource
+    });
+  } catch (error) {
+    console.error('Approve Resource Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to approve resource',
+      message: error.message
+    });
+  }
+};
+
+/**
+ * ADMIN: Reject resource
+ */
+export const rejectResource = async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    const resource = await Resource.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: 'rejected',
+        rejectionReason: reason || 'Rejected by admin'
+      },
+      { new: true }
+    ).populate('submittedBy', 'name email');
+
+    if (!resource) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Resource not found' 
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Resource rejected successfully',
+      resource
+    });
+  } catch (error) {
+    console.error('Reject Resource Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reject resource',
+      message: error.message
+    });
+  }
+};
 // =====================
 // SEMINARS MANAGEMENT
 // =====================
