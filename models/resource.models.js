@@ -62,6 +62,25 @@ const resourceSchema = new mongoose.Schema(
 
     fileSize: Number,
     mimeType: String,
+
+    // ✅✅✅ ADMIN APPROVAL SYSTEM FIELDS ✅✅✅
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      required: true,
+    },
+
+    rejectionReason: {
+      type: String,
+      trim: true,
+    },
+
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User', // Change to 'Admin' if your user model is named 'Admin'
+      required: false, // Set to false to avoid errors with existing resources
+    },
   },
   { timestamps: true }
 );

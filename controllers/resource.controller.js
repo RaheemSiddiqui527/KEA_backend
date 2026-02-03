@@ -34,10 +34,14 @@ export const getAllResources = async (req, res) => {
     const skip = (page - 1) * limit;
     const sortOrder = order === 'desc' ? -1 : 1;
 
-    const resources = await Resource.find(query)
+    const resources = await Resource.find({
+      ...query,
+      status: { $ne: "pending" }
+    })
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(Number(limit));
+
 
     const total = await Resource.countDocuments(query);
 
@@ -346,17 +350,29 @@ export const deleteResource = async (req, res) => {
  */
 export const getCategoryStats = async (req, res) => {
   try {
+    // Exclude pending resources
+    const matchStage = { status: { $ne: 'pending' } };
+
     const stats = await Resource.aggregate([
-      { $group: { _id: '$category', count: { $sum: 1 } } }
+      { $match: matchStage },
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 }
+        }
+      }
     ]);
 
-    const total = await Resource.countDocuments();
+    const total = await Resource.countDocuments(matchStage);
 
     res.json({
       success: true,
       categories: [
         { name: 'All resources', count: total },
-        ...stats.map(s => ({ name: s._id, count: s.count }))
+        ...stats.map(s => ({
+          name: s._id,
+          count: s.count
+        }))
       ]
     });
   } catch (error) {
@@ -367,3 +383,5 @@ export const getCategoryStats = async (req, res) => {
     });
   }
 };
+
+

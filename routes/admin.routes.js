@@ -1,8 +1,9 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import AdminController from '../controllers/admin.controller.js';
+import AdminController, { adminGetAllResources, adminGetStats, approveResource, rejectResource } from '../controllers/admin.controller.js';
 import { auth } from '../middleware/auth.middleware.js';
 import { requireRole } from '../middleware/role.middleware.js';
+import { deleteResource, getResourceById } from '../controllers/resource.controller.js';
 
 const router = express.Router();
 
@@ -155,8 +156,13 @@ router.delete('/tools/:id', adminWriteLimiter, AdminController.deleteTool);
 // =====================
 
 // Read operations
-router.get('/resources', adminReadLimiter, AdminController.getAllResources);
-router.get('/resources/:id', adminReadLimiter, AdminController.getResourceById);
+// ✅ SOLUTION: Use different routes or consolidate
+router.get('/resources', adminReadLimiter, adminGetAllResources);
+router.get('/resources/stats', adminReadLimiter, adminGetStats);
+router.patch('/resources/:id/approve', adminWriteLimiter, approveResource);
+router.patch('/resources/:id/reject', adminWriteLimiter, rejectResource);
+router.get('/resources/:id', adminReadLimiter, getResourceById);
+router.delete('/resources/:id', adminWriteLimiter, deleteResource);
 
 // Write operations
 router.delete('/resources/:id', adminWriteLimiter, AdminController.deleteResource);
