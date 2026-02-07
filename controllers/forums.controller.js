@@ -2,15 +2,90 @@ import Thread from '../models/thread.models.js';
 
 // Get all threads
 // Get all threads (SECURE)
+// export const listThreads = async (req, res) => {
+//   try {
+//     const { category, search, page = 1, limit = 20, sort = 'latest' } = req.query;
+//     // console.log("req", req.user)
+//     const isAdmin = req.user?.role === 'admin';
+//     // console.log("isAdmin", isAdmin)
+//     const query = isAdmin ? {} : { status: 'approved' };
+
+//     if (category && category !== 'All discussions') {
+//       query.category = category;
+//     }
+
+//     if (search) {
+//       query.$or = [
+//         { title: { $regex: search, $options: 'i' } },
+//         { content: { $regex: search, $options: 'i' } }
+//       ];
+//     }
+
+//     if (sort === 'unanswered') {
+//       query.replies = { $size: 0 };
+//     }
+
+//     const sortOption =
+//       sort === 'popular'
+//         ? { views: -1 }
+//         : { isPinned: -1, lastActivity: -1 };
+
+//     const skip = (page - 1) * limit;
+
+//     const [threads, total] = await Promise.all([
+//       Thread.find(query)
+//         .populate('author', 'name email')
+//         .sort(sortOption)
+//         .skip(skip)
+//         .limit(Number(limit))
+//         .lean(),
+//       Thread.countDocuments(query)
+//     ]);
+
+//     res.json({
+//       threads,
+//       pagination: {
+//         page: Number(page),
+//         limit: Number(limit),
+//         total,
+//         pages: Math.ceil(total / limit)
+//       }
+//     });
+//   } catch (err) {
+//     res.status(500).json({ message: 'Error fetching threads' });
+//   }
+// };
+
 export const listThreads = async (req, res) => {
   try {
-    const { category, search, page = 1, limit = 20, sort = 'latest' } = req.query;
+    const {
+      category,
+      search,
+      status,   // ✅ ADD THIS
+      page = 1,
+      limit = 20,
+      sort = 'latest'
+    } = req.query;
 
     const isAdmin = req.user?.role === 'admin';
 
-    const query = isAdmin ? {} : { status: 'approved' };
+    const query = {};
 
-    if (category && category !== 'All discussions') {
+    // 🔒 Users → approved only
+    if (!isAdmin) {
+      query.status = 'approved';
+    }
+
+    // 🟢 Admin status filter
+    if (isAdmin && status) {
+      query.status = status;
+    }
+
+    if (
+      category &&
+      category !== 'all' &&
+      category !== 'All discussions'
+    ) {
       query.category = category;
     }
 
@@ -57,11 +132,44 @@ export const listThreads = async (req, res) => {
 };
 
 
+// Get single thread
+// Get single thread
+// export const getThread = async (req, res) => {
+//   try {
+//     const thread = await Thread.findById(req.params.id)
+//       .populate('author', 'name email')
+//       .populate('replies.author', 'name email')
+//       .lean();
 
-// Get single thread
-// Get single thread
+//     if (!thread) {
+//       return res.status(404).json({ message: 'Thread not found' });
+//     }
+
+//     const isAdmin = req.user?.role === 'admin';
+
+//     if (thread.status !== 'approved' && !isAdmin) {
+//       return res.status(403).json({
+//         message: 'Thread pending admin approval'
+//       });
+//     }
+
+//     await Thread.findByIdAndUpdate(req.params.id, {
+//       $inc: { views: 1 }
+//     });
+
+//     res.json(thread);
+//   } catch (err) {
+//     res.status(500).json({ message: 'Error fetching thread' });
+//   }
+// };
 export const getThread = async (req, res) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({
+        message: 'Authentication required'
+      });
+    }
+
     const thread = await Thread.findById(req.params.id)
       .populate('author', 'name email')
       .populate('replies.author', 'name email')
@@ -71,20 +179,23 @@ export const getThread = async (req, res) => {
       return res.status(404).json({ message: 'Thread not found' });
     }
 
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = req.user.role === 'admin';
 
-    if (thread.status !== 'approved' && !isAdmin) {
+    // 🔒 USERS can only see APPROVED threads
+    if (!isAdmin && thread.status !== 'approved') {
       return res.status(403).json({
         message: 'Thread pending admin approval'
       });
     }
 
+    // 👀 Count views only when visible
     await Thread.findByIdAndUpdate(req.params.id, {
       $inc: { views: 1 }
     });
 
     res.json(thread);
   } catch (err) {
+    console.error('❌ Error fetching thread:', err);
     res.status(500).json({ message: 'Error fetching thread' });
   }
 };
@@ -108,6 +219,34 @@ export const approveThread = async (req, res) => {
     res.json({ message: 'Thread approved', thread });
   } catch (err) {
     res.status(500).json({ message: 'Approval failed' });
+  }
+};
+
+export const rejectThread = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        message: 'Admin access only'
+      });
+    }
+
+    const thread = await Thread.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: 'rejected',
+        rejectedBy: req.user._id,
+        rejectedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (!thread) {
+      return res.status(404).json({ message: 'Thread not found' });
+    }
+
+    res.json({ message: 'Thread rejected', thread });
+  } catch (err) {
+    res.status(500).json({ message: 'Reject failed' });
   }
 };
 
@@ -189,47 +328,47 @@ export const replyThread = async (req, res) => {
 export const likeReply = async (req, res) => {
   try {
     const { replyId } = req.params;
-    
+
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
-    
+
     const thread = await Thread.findById(req.params.id);
-    
+
     if (!thread) {
       return res.status(404).json({ message: 'Thread not found' });
     }
-    
+
     const reply = thread.replies.id(replyId);
-    
+
     if (!reply) {
       return res.status(404).json({ message: 'Reply not found' });
     }
-    
+
     const userIdString = req.user._id.toString();
     const likeIndex = reply.likes.findIndex(
       id => id.toString() === userIdString
     );
-    
+
     if (likeIndex > -1) {
       reply.likes.splice(likeIndex, 1);
     } else {
       reply.likes.push(req.user._id);
     }
-    
+
     await thread.save();
-    
+
     const updatedThread = await Thread.findById(thread._id)
       .populate('author', 'name email')
       .populate('replies.author', 'name email')
       .lean();
-    
+
     res.json(updatedThread);
   } catch (err) {
     console.error('❌ Error in likeReply:', err);
-    res.status(500).json({ 
-      message: 'Error liking reply', 
-      error: err.message 
+    res.status(500).json({
+      message: 'Error liking reply',
+      error: err.message
     });
   }
 };
@@ -283,29 +422,58 @@ export const deleteThread = async (req, res) => {
 export const togglePinThread = async (req, res) => {
   try {
     const thread = await Thread.findById(req.params.id);
-    
+
     if (!thread) {
       return res.status(404).json({ message: 'Thread not found' });
     }
-    
+
     thread.isPinned = !thread.isPinned;
     await thread.save();
-    
+
     res.json(thread);
   } catch (err) {
     console.error('❌ Error in togglePinThread:', err);
-    res.status(500).json({ 
-      message: 'Error pinning thread', 
-      error: err.message 
+    res.status(500).json({
+      message: 'Error pinning thread',
+      error: err.message
     });
   }
 };
 
+// export const editThread = async (req, res) => {
+//   try {
+//     const thread = await Thread.findByIdAndUpdate(
+//       req.params.id,
+//       req.body,
+//       { new: true }
+//     );
+
+//     if (!thread) {
+//       return res.status(404).json({ message: 'Thread not found' });
+//     }
+
+//     res.json(thread);
+//   } catch (err) {
+//     res.status(500).json({ message: 'Edit failed' });
+//   }
+// };
+
+// Lock thread
+
 export const editThread = async (req, res) => {
   try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access only' });
+    }
+
     const thread = await Thread.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      {
+        title: req.body.title,
+        content: req.body.content,
+        category: req.body.category,
+        tags: req.body.tags
+      },
       { new: true }
     );
 
@@ -319,24 +487,24 @@ export const editThread = async (req, res) => {
   }
 };
 
-// Lock thread
+
 export const toggleLockThread = async (req, res) => {
   try {
     const thread = await Thread.findById(req.params.id);
-    
+
     if (!thread) {
       return res.status(404).json({ message: 'Thread not found' });
     }
-    
+
     thread.isLocked = !thread.isLocked;
     await thread.save();
-    
+
     res.json(thread);
   } catch (err) {
     console.error('❌ Error in toggleLockThread:', err);
-    res.status(500).json({ 
-      message: 'Error locking thread', 
-      error: err.message 
+    res.status(500).json({
+      message: 'Error locking thread',
+      error: err.message
     });
   }
 };
