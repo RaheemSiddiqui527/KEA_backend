@@ -29,22 +29,18 @@ export const register = async (req, res, next) => {
       membershipStatus
     } = req.body;
 
-    // 1️⃣ Validate required fields
     if (!name || !email || !password)
       return res.status(400).json({ message: "Name, Email & Password required" });
 
-    // 2️⃣ Check if user already exists
     const exists = await User.findOne({ email });
     if (exists)
       return res.status(400).json({ message: "Email already in use" });
 
-    // 3️⃣ Create user with full profile data
     const user = await User.create({
       name,
       email,
       password,
       role: role || "user",
-
       profile: {
         headline: profile?.headline || "",
         bio: profile?.bio || "",
@@ -57,23 +53,19 @@ export const register = async (req, res, next) => {
         skills: profile?.skills || [],
         education: profile?.education || [],
         experience: profile?.experience || [],
-        references: profile?.references || [], // ✅ NOW SAVING REFERENCES
+        references: profile?.references || [],
         avatar: profile?.avatar || ""
       },
-
       membershipStatus: membershipStatus || "pending"
     });
 
-    // 4️⃣ Send registration confirmation email
     try {
       await sendRegistrationEmail(email, name);
       console.log('✅ Registration email sent to:', email);
     } catch (emailError) {
       console.error('❌ Failed to send registration email:', emailError);
-      // Don't fail registration if email fails
     }
 
-    // 5️⃣ Generate JWT token
     const token = signToken(user);
 
     res.status(201).json({
@@ -87,9 +79,87 @@ export const register = async (req, res, next) => {
   }
 };
 
+// ---------------------------------------
+// ADMIN REGISTER
+// ✅ Pehla admin: ADMIN_SECRET_KEY se protected
+// ✅ Baad ke admins: existing admin ka JWT chahiye (route pe isAdmin middleware)
+// ---------------------------------------
+export const adminRegister = async (req, res, next) => {
+  try {
+    const {
+      name,
+      email,
+      password,
+      phone,
+      secretKey,    // pehle admin ke liye
+      profile
+    } = req.body;
+
+    // 1️⃣ Required fields
+    if (!name || !email || !password)
+      return res.status(400).json({ message: "Name, Email & Password required" });
+
+    // 2️⃣ Agar request already admin JWT se aayi hai (req.user set hai by middleware)
+    //    toh secret key check skip karo
+    //    Agar req.user nahi hai (pehla admin case) toh secret key validate karo
+    if (!req.user) {
+      const validSecret = process.env.ADMIN_SECRET_KEY;
+      if (!secretKey || secretKey !== validSecret) {
+        return res.status(403).json({ message: "Invalid or missing admin secret key" });
+      }
+    }
+
+    // 3️⃣ Check duplicate
+    const exists = await User.findOne({ email });
+    if (exists)
+      return res.status(400).json({ message: "Email already in use" });
+
+    // 4️⃣ Create admin user — role always 'admin', membershipStatus 'approved'
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role: "admin",
+      profile: {
+        headline: profile?.headline || "",
+        bio: profile?.bio || "",
+        phone: profile?.phone || "",
+        location: profile?.location || "",
+        category: profile?.category || "Other",
+        company: profile?.company || "",
+        position: profile?.position || "",
+        yearsOfExperience: profile?.yearsOfExperience || "",
+        skills: profile?.skills || [],
+        education: profile?.education || [],
+        experience: profile?.experience || [],
+        references: profile?.references || [],
+        avatar: profile?.avatar || ""
+      },
+      membershipStatus: "approved"   // admin ko approval nahi chahiye
+    });
+
+    try {
+      await sendRegistrationEmail(email, name);
+      console.log('✅ Admin registration email sent to:', email);
+    } catch (emailError) {
+      console.error('❌ Failed to send admin registration email:', emailError);
+    }
+
+    const token = signToken(user);
+
+    res.status(201).json({
+      message: "Admin registered successfully.",
+      token,
+      user,
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
 
 // ---------------------------------------
-// LOGIN USER
+// LOGIN USER (regular users only)
 // ---------------------------------------
 export const login = async (req, res, next) => {
   try {
@@ -106,10 +176,49 @@ export const login = async (req, res, next) => {
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
+    // ✅ Admin ko user login se block karo
+    if (user.role === "admin")
+      return res.status(403).json({ message: "Admins must use the admin login portal" });
+
     const token = signToken(user);
 
     res.json({
       message: "Login successful",
+      token,
+      user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------------------------------------
+// ADMIN LOGIN
+// ✅ Sirf role === 'admin' allow hoga
+// ---------------------------------------
+export const adminLogin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password)
+      return res.status(400).json({ message: "Missing credentials" });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    // ✅ Role check — only admins get through
+    if (user.role !== "admin")
+      return res.status(403).json({ message: "Access denied. Admins only." });
+
+    const token = signToken(user);
+
+    res.json({
+      message: "Admin login successful",
       token,
       user,
     });
@@ -132,10 +241,8 @@ export const forgotPassword = async (req, res, next) => {
     if (!user)
       return res.status(404).json({ message: "No user found with that email" });
 
-    // Generate token
     const resetToken = crypto.randomBytes(32).toString("hex");
 
-    // Save encrypted token in DB
     user.resetPasswordToken = crypto
       .createHash("sha256")
       .update(resetToken)
@@ -145,10 +252,9 @@ export const forgotPassword = async (req, res, next) => {
 
     await user.save({ validateBeforeSave: false });
 
-    // Send token in response (You can integrate email service later)
     res.json({
       message: "Password reset token generated",
-      resetToken, // send to frontend
+      resetToken,
       expiresIn: "10 minutes",
     });
   } catch (err) {
@@ -167,7 +273,6 @@ export const resetPassword = async (req, res, next) => {
     if (!password)
       return res.status(400).json({ message: "Password is required" });
 
-    // encrypt token
     const hashedToken = crypto
       .createHash("sha256")
       .update(token)
@@ -179,9 +284,7 @@ export const resetPassword = async (req, res, next) => {
     });
 
     if (!user)
-      return res
-        .status(400)
-        .json({ message: "Token invalid or expired" });
+      return res.status(400).json({ message: "Token invalid or expired" });
 
     user.password = password;
     user.resetPasswordToken = undefined;
@@ -202,44 +305,39 @@ export const resetPassword = async (req, res, next) => {
 };
 
 // ---------------------------------------
-// APPROVE USER (admin only - with email notification)
+// APPROVE USER (admin only)
 // ---------------------------------------
 export const approveUser = async (req, res, next) => {
   try {
     const { userId } = req.params;
 
-    // Find user and update membership status
     const user = await User.findByIdAndUpdate(
       userId,
-      { membershipStatus: 'approved' },
+      { membershipStatus: "approved" },
       { new: true }
     );
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    if (!user)
+      return res.status(404).json({ message: "User not found" });
 
-    // Send approval email
     try {
       await sendApprovalEmail(user.email, user.name);
       console.log('✅ Approval email sent to:', user.email);
     } catch (emailError) {
       console.error('❌ Failed to send approval email:', emailError);
-      // Don't fail approval if email fails
     }
 
     res.status(200).json({
-      message: 'User approved successfully. Approval email sent.',
+      message: "User approved successfully. Approval email sent.",
       user,
     });
-
   } catch (err) {
     next(err);
   }
 };
 
 // ---------------------------------------
-// REJECT USER (admin only - with email notification)
+// REJECT USER (admin only)
 // ---------------------------------------
 export const rejectUser = async (req, res, next) => {
   try {
@@ -248,15 +346,13 @@ export const rejectUser = async (req, res, next) => {
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { membershipStatus: 'rejected' },
+      { membershipStatus: "rejected" },
       { new: true }
     );
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    if (!user)
+      return res.status(404).json({ message: "User not found" });
 
-    // Send rejection email with reason
     try {
       await sendRejectionEmail(user.email, user.name, reason);
       console.log('✅ Rejection email sent to:', user.email);
@@ -265,10 +361,9 @@ export const rejectUser = async (req, res, next) => {
     }
 
     res.status(200).json({
-      message: 'User membership rejected. Notification email sent.',
+      message: "User membership rejected. Notification email sent.",
       user,
     });
-
   } catch (err) {
     next(err);
   }

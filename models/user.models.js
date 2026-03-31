@@ -37,66 +37,30 @@ const categories = [
 ================================ */
 const EducationSchema = new mongoose.Schema(
   {
-    institution: String,
-    degree: String,
-    from: Date,
-    to: Date,
+    institution: { type: String, default: "" },
+    degree: { type: String, default: "" },
+    from: { type: String, default: "" },   // ✅ String rakha — "YYYY/MM" format
+    to: { type: String, default: "" },
   },
   { _id: false }
 );
 
 const ExperienceSchema = new mongoose.Schema(
   {
-    company: String,
-    position: String,
-    from: Date,
-    to: Date,
-    description: String,
+    company: { type: String, default: "" },
+    position: { type: String, default: "" },
+    from: { type: String, default: "" },   // ✅ String rakha — "YYYY/MM" or "Present"
+    to: { type: String, default: "" },
+    description: { type: String, default: "" },
   },
   { _id: false }
 );
 
-/* ===============================
-   PROFILE SCHEMA (UPDATED)
-================================ */
-const ProfileSchema = new mongoose.Schema(
+const ReferenceSchema = new mongoose.Schema(
   {
-    headline: String,
-    bio: String,
-    phone: String,
-    location: String,
-
-    category: {
-      type: String,
-      enum: categories,      // ✅ category added
-      default: "Other",
-    },
-
-    skills: [String],
-    education: [EducationSchema],
-    experience: [ExperienceSchema],
-
-    position: {
-      type: String,
-      required: true,
-    },
-
-    company: {
-      type: String,
-      required: true,
-    },
-
-    yearsOfExperience: String,
-
-    socialLinks: {
-      linkedin: String,
-      twitter: String,
-      facebook: String,
-      instagram: String,
-      website: String,
-    },
-
-    avatar: String,
+    name: { type: String, default: "" },
+    contact: { type: String, default: "" },
+    relation: { type: String, default: "" },
   },
   { _id: false }
 );
@@ -104,59 +68,96 @@ const ProfileSchema = new mongoose.Schema(
 /* ===============================
    USER SCHEMA
 ================================ */
-const UserSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+const UserSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    password: { type: String, required: true },
 
-  role: {
-    type: String,
-    enum: ["user", "admin"],
-    default: "user",
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
+
+    // ✅ Mixed type — admin aur user dono ka alag profile support karta hai
+    profile: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+
+    memberId: {
+      type: String,
+      unique: true,
+      sparse: true,   // ✅ null/undefined allow karta hai (admins ke liye)
+    },
+
+    membershipStatus: {
+      type: String,
+      enum: ["pending", "active", "approved", "rejected"],
+      default: "pending",
+    },
+
+    // Password reset fields
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
   },
-
-  profile: ProfileSchema,
-
-  memberId: {
-    type: String,
-    unique: true,
-    sparse: true,
-  },
-
-  membershipStatus: {
-    type: String,
-    enum: ["pending", "active", "rejected"],
-    default: "pending",
-  },
-
-  createdAt: { type: Date, default: Date.now },
-});
+  { timestamps: true }
+);
 
 /* ===============================
    PRE-SAVE HOOK
 ================================ */
 UserSchema.pre("save", async function () {
-  // Hash password
+  // 1️⃣ Hash password
   if (this.isModified("password")) {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
   }
 
-  // Generate Member ID
-  if (this.isNew && !this.memberId) {
+  // 2️⃣ Admin setup — no memberId, auto approved
+  if (this.isNew && this.role === "admin") {
+    this.membershipStatus = "approved";
+    this.memberId = undefined;
+    return; // ✅ Baaki kuch nahi karna admin ke liye
+  }
+
+  // 3️⃣ User ke liye unique memberId generate karo
+  if (this.isNew && this.role === "user" && !this.memberId) {
+    let isUnique = false;
+    let nextNumber = 1;
+    let memberId;
+
+    // ✅ Highest existing memberId dhundho
     const lastUser = await this.constructor.findOne(
-      { memberId: { $exists: true } },
-      {},
-      { sort: { createdAt: -1 } }
+      { memberId: { $exists: true, $ne: null }, role: "user" },
+      { memberId: 1 },
+      { sort: { memberId: -1 } }
     );
 
-    let nextNumber = 1;
     if (lastUser?.memberId) {
-      const lastNum = parseInt(lastUser.memberId.replace("KEA-", ""));
-      nextNumber = lastNum + 1;
+      const lastNum = parseInt(lastUser.memberId.replace("KEA-", ""), 10);
+      if (!isNaN(lastNum)) nextNumber = lastNum + 1;
     }
 
-    this.memberId = `KEA-${String(nextNumber).padStart(3, "0")}`;
+    // ✅ Loop — jab tak unique ID na mile
+    while (!isUnique) {
+      memberId = `KEA-${String(nextNumber).padStart(3, "0")}`;
+      const existing = await this.constructor.findOne({ memberId });
+      if (!existing) {
+        isUnique = true;
+      } else {
+        nextNumber++;
+      }
+    }
+
+    this.memberId = memberId;
   }
 });
 
@@ -166,5 +167,19 @@ UserSchema.pre("save", async function () {
 UserSchema.methods.comparePassword = function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
+
+UserSchema.methods.isAdmin = function () {
+  return this.role === "admin";
+};
+
+// ✅ toJSON — sensitive fields response mein kabhi nahi aayenge
+UserSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    delete ret.password;
+    delete ret.resetPasswordToken;
+    delete ret.resetPasswordExpires;
+    return ret;
+  },
+});
 
 export default mongoose.model("User", UserSchema);
