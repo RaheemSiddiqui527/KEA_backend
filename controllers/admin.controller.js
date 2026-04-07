@@ -507,7 +507,10 @@ const getAllEvents = async (req, res, next) => {
 
 const getEventById = async (req, res, next) => {
   try {
-    const event = await Event.findById(req.params.id).populate("organizer", "name email");
+    const event = await Event.findById(req.params.id)
+      .populate("organizer", "name email")
+      .populate("registeredUsers", "name email profile")
+      .populate("pendingAttendees", "name email profile");
     if (!event) return res.status(404).json({ message: "Event not found" });
     res.json(event);
   } catch (err) {
@@ -1388,7 +1391,9 @@ const getGroupById = async (req, res, next) => {
     const group = await Group.findById(req.params.id)
       .populate('creator', 'name email profile')
       .populate('approvedBy', 'name email')
-      .populate('members.user', 'name email profile');
+      .populate('members.user', 'name email profile')
+      .populate('pendingMembers.user', 'name email profile')
+      .populate('posts.author', 'name email profile');
 
     if (!group) {
       return res.status(404).json({ message: "Group not found" });

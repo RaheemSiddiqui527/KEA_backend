@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 import Group from '../models/group.models.js';
+import User from '../models/user.models.js';
+import { createAdminNotification, createUserNotification } from '../utils/createNotification.js';
+import { sendGroupJoinRequestEmail, sendGroupApprovalEmail } from '../utils/emailService.js';
 
 // Get all groups with filters (only approved or default groups)
 export const listGroups = async (req, res) => {
@@ -325,7 +328,7 @@ export const rejectGroup = async (req, res) => {
   }
 };
 
-// Join group - FIXED VERSION
+// Join group (With approval system)
 export const joinGroup = async (req, res) => {
   try {
     const group = await Group.findById(req.params.id);
@@ -347,8 +350,62 @@ export const joinGroup = async (req, res) => {
     if (isMember) {
       return res.status(400).json({ message: 'Already a member' });
     }
+
+    // Check if already has a pending request
+    const hasRequest = group.pendingMembers?.some(
+      m => m.user.toString() === req.user._id.toString()
+    );
+
+    if (hasRequest) {
+      return res.status(400).json({ message: 'Join request already sent and pending approval' });
+    }
+
+    // Determine if auto-join or need approval
+    const requireApproval = group.settings?.requireApproval || false;
+
+    if (requireApproval) {
+      // Add to pending members
+      await Group.findByIdAndUpdate(req.params.id, {
+        $push: {
+          pendingMembers: {
+            user: req.user._id,
+            requestedAt: new Date()
+          }
+        }
+      });
+
+      // Notify Group Creator/Admins
+      // Use createAdminNotification for general platform logging or specific user notification for creators
+      // For now, let's notify the group's creator and admins
+      const adminIds = [group.creator, ...(group.admins || [])].map(id => id.toString());
+      const uniqueAdmins = [...new Set(adminIds)];
+
+      // ✅ Send notifications to each admin/creator
+      for (const adminId of uniqueAdmins) {
+        await createUserNotification({
+          userId: adminId,
+          type: 'group_request',
+          title: 'New Group Join Request',
+          message: `${req.user.name} wants to join "${group.name}"`,
+          relatedId: group._id,
+          relatedModel: 'Group'
+        });
+      }
+
+      // ✅ SEND EMAIL TO USER (Join Request Received)
+      try {
+        await sendGroupJoinRequestEmail(req.user.email, req.user.name, group.name);
+      } catch (emailErr) {
+        console.error('Error sending group join request email:', emailErr);
+      }
+
+      return res.json({ 
+        message: 'Join request sent successfully! Waiting for approval.',
+        status: 'pending'
+      });
+    }
     
-    // Use findByIdAndUpdate to avoid validation issues
+    // Auto-join (Standard membership)
     const updatedGroup = await Group.findByIdAndUpdate(
       req.params.id,
       {
@@ -362,17 +419,146 @@ export const joinGroup = async (req, res) => {
       },
       { 
         new: true,
-        runValidators: false  // ✅ Skip validation on update
+        runValidators: false 
       }
     )
     .populate('creator', 'name email')
     .populate('members.user', 'name email')
     .lean();
     
-    res.json(updatedGroup);
+    res.json({
+      message: 'Joined group successfully!',
+      group: updatedGroup,
+      status: 'member'
+    });
   } catch (err) {
     console.error('❌ Error in joinGroup:', err);
     res.status(500).json({ message: 'Error joining group', error: err.message });
+  }
+};
+
+// GET group join requests
+export const getPendingRequests = async (req, res) => {
+  try {
+    const group = await Group.findById(req.params.id)
+      .populate('pendingMembers.user', 'name email profile')
+      .lean();
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    // Check if requester is group admin/moderator
+    const isOwner = group.creator.toString() === req.user._id.toString();
+    const isAdmin = group.members.some(m => 
+      m.user._id.toString() === req.user._id.toString() && ['admin', 'moderator'].includes(m.role)
+    );
+
+    if (!isOwner && !isAdmin && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Unauthorized to view requests' });
+    }
+
+    res.json(group.pendingMembers || []);
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching requests', error: err.message });
+  }
+};
+
+// Approve group join request
+export const approveJoinRequest = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const group = await Group.findById(req.params.id);
+
+    if (!group) return res.status(404).json({ message: 'Group not found' });
+
+    // Auth check
+    const isOwner = group.creator.toString() === req.user._id.toString();
+    const isAdminMember = group.members.some(m => 
+      m.user.toString() === req.user._id.toString() && ['admin', 'moderator'].includes(m.role)
+    );
+
+    if (!isOwner && !isAdminMember && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Unauthorized to approve requests' });
+    }
+
+    const requestIndex = group.pendingMembers.findIndex(m => m.user.toString() === userId);
+    if (requestIndex === -1) return res.status(404).json({ message: 'Request not found' });
+
+    // Move to members
+    group.members.push({
+      user: userId,
+      role: 'member',
+      joinedAt: new Date()
+    });
+    group.pendingMembers.splice(requestIndex, 1);
+
+    await group.save();
+
+    // Fetch user details for email
+    const participant = await User.findById(userId);
+    if (participant) {
+      try {
+        await sendGroupApprovalEmail(participant.email, participant.name, group.name);
+      } catch (emailErr) {
+        console.error('Error sending group approval email:', emailErr);
+      }
+    }
+
+    // Notify user
+    await createUserNotification({
+      userId,
+      type: 'group_approved',
+      title: 'Group Request Approved',
+      message: `Your request to join "${group.name}" was approved!`,
+      relatedId: group._id,
+      relatedModel: 'Group'
+    });
+
+    res.json({ message: 'User approved' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error approving request', error: err.message });
+  }
+};
+
+// Reject group join request
+export const rejectJoinRequest = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const group = await Group.findById(req.params.id);
+
+    if (!group) return res.status(404).json({ message: 'Group not found' });
+
+    // Auth check
+    const isOwner = group.creator.toString() === req.user._id.toString();
+    const isAdminMember = group.members.some(m => 
+      m.user.toString() === req.user._id.toString() && ['admin', 'moderator'].includes(m.role)
+    );
+
+    if (!isOwner && !isAdminMember && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Unauthorized to reject requests' });
+    }
+
+    const requestIndex = group.pendingMembers.findIndex(m => m.user.toString() === userId);
+    if (requestIndex === -1) return res.status(404).json({ message: 'Request not found' });
+
+    // Remove from pending
+    group.pendingMembers.splice(requestIndex, 1);
+    await group.save();
+
+    // Notify user
+    await createUserNotification({
+      userId,
+      type: 'group_rejected',
+      title: 'Group Request Rejected',
+      message: `Your request to join "${group.name}" was rejected.`,
+      relatedId: group._id,
+      relatedModel: 'Group'
+    });
+
+    res.json({ message: 'User rejected' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error rejecting request', error: err.message });
   }
 };
 

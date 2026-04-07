@@ -1,6 +1,8 @@
 import Event from '../models/event.models.js';
 import EventRegistration from '../models/EventRegistration.models.js';
-import { createAdminNotification } from '../utils/createNotification.js';
+import User from '../models/user.models.js'; // Needed to fetch user details for emails
+import { createAdminNotification, createUserNotification } from '../utils/createNotification.js';
+import { sendEventRegistrationEmail, sendEventApprovalEmail } from '../utils/emailService.js';
 
 // Create event
 export const createEvent = async (req, res) => {
@@ -105,10 +107,10 @@ export const getEvent = async (req, res) => {
   }
 };
 
-// Register for event - FIXED
+// Register for event (with approval system)
 export const registerForEvent = async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id).lean();
+    const event = await Event.findById(req.params.id);
     
     if (!event) {
       return res.status(404).json({ message: 'Event not found' });
@@ -126,6 +128,15 @@ export const registerForEvent = async (req, res) => {
     if (alreadyRegistered) {
       return res.status(400).json({ message: 'Already registered for this event' });
     }
+
+    // Check if already in pending list
+    const isPending = event.pendingAttendees?.some(
+      userId => userId.toString() === req.user._id.toString()
+    );
+
+    if (isPending) {
+      return res.status(400).json({ message: 'Registration request already sent and pending approval' });
+    }
     
     // Check max attendees
     if (event.maxAttendees && event.registeredUsers?.length >= event.maxAttendees) {
@@ -136,8 +147,37 @@ export const registerForEvent = async (req, res) => {
     if (event.registrationDeadline && new Date() > new Date(event.registrationDeadline)) {
       return res.status(400).json({ message: 'Registration deadline has passed' });
     }
+
+    // If approval is required
+    if (event.requireApproval) {
+      await Event.findByIdAndUpdate(req.params.id, {
+        $push: { pendingAttendees: req.user._id }
+      });
+
+      // Notify Organizer
+      await createUserNotification({
+        userId: event.organizer,
+        type: 'event_request',
+        title: 'New Registration Request',
+        message: `${req.user.name} wants to register for "${event.title}"`,
+        relatedId: event._id,
+        relatedModel: 'Event'
+      });
+
+      // 🎉 SEND EMAIL TO USER (Request Received)
+      try {
+        await sendEventRegistrationEmail(req.user.email, req.user.name, event.title);
+      } catch (emailErr) {
+        console.error('Error sending registration request email:', emailErr);
+      }
+
+      return res.json({ 
+        message: 'Registration request sent! Waiting for organizer approval.',
+        status: 'pending'
+      });
+    }
     
-    // Use findByIdAndUpdate to avoid validation issues
+    // Direct registration
     const updatedEvent = await Event.findByIdAndUpdate(
       req.params.id,
       {
@@ -145,7 +185,7 @@ export const registerForEvent = async (req, res) => {
       },
       { 
         new: true,
-        runValidators: false  // Skip validation on update
+        runValidators: false
       }
     )
     .populate('organizer', 'name email')
@@ -160,16 +200,130 @@ export const registerForEvent = async (req, res) => {
         status: 'confirmed'
       });
     } catch (regError) {
-      // Ignore duplicate registration errors
       if (regError.code !== 11000) {
         console.error('Error creating registration record:', regError);
       }
     }
     
-    res.json({ message: 'Successfully registered for event', event: updatedEvent });
+    res.json({ 
+      message: 'Successfully registered for event', 
+      event: updatedEvent,
+      status: 'confirmed'
+    });
   } catch (err) {
     console.error('❌ Error in registerForEvent:', err);
     res.status(500).json({ message: 'Error registering for event', error: err.message });
+  }
+};
+
+// GET pending registrations
+export const getPendingRegistrations = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id)
+      .populate('pendingAttendees', 'name email profile')
+      .lean();
+
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    // Check if requester is organizer
+    if (event.organizer.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Unauthorized to view registrations' });
+    }
+
+    res.json(event.pendingAttendees || []);
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching registrations', error: err.message });
+  }
+};
+
+// Approve registration
+export const approveRegistration = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const event = await Event.findById(req.params.id);
+
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    if (event.organizer.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Unauthorized to approve registrations' });
+    }
+
+    const pendingIndex = event.pendingAttendees.indexOf(userId);
+    if (pendingIndex === -1) return res.status(404).json({ message: 'Registration request not found' });
+
+    // Move to registered
+    event.registeredUsers.push(userId);
+    event.pendingAttendees.splice(pendingIndex, 1);
+    await event.save();
+
+    // Fetch user details for email
+    const participant = await User.findById(userId);
+    if (participant) {
+      try {
+        await sendEventApprovalEmail(participant.email, participant.name, event.title);
+      } catch (emailErr) {
+        console.error('Error sending event approval email:', emailErr);
+      }
+    }
+
+    // Create registration record
+    try {
+      await EventRegistration.create({
+        user: userId,
+        event: event._id,
+        status: 'confirmed'
+      });
+    } catch (regError) {
+      if (regError.code !== 11000) console.error(regError);
+    }
+
+    // Notify user
+    await createUserNotification({
+      userId,
+      type: 'event_approved',
+      title: 'Registration Approved',
+      message: `Your registration for "${event.title}" was approved!`,
+      relatedId: event._id,
+      relatedModel: 'Event'
+    });
+
+    res.json({ message: 'Registration approved successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error approving registration', error: err.message });
+  }
+};
+
+// Reject registration
+export const rejectRegistration = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const event = await Event.findById(req.params.id);
+
+    if (!event) return res.status(404).json({ message: 'Event not found' });
+
+    if (event.organizer.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Unauthorized to reject registrations' });
+    }
+
+    const pendingIndex = event.pendingAttendees.indexOf(userId);
+    if (pendingIndex === -1) return res.status(404).json({ message: 'Registration request not found' });
+
+    event.pendingAttendees.splice(pendingIndex, 1);
+    await event.save();
+
+    // Notify user
+    await createUserNotification({
+      userId,
+      type: 'event_rejected',
+      title: 'Registration Rejected',
+      message: `Your registration for "${event.title}" was rejected.`,
+      relatedId: event._id,
+      relatedModel: 'Event'
+    });
+
+    res.json({ message: 'Registration rejected' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error rejecting registration', error: err.message });
   }
 };
 

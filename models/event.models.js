@@ -43,6 +43,14 @@ const eventSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  pendingAttendees: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  requireApproval: {
+    type: Boolean,
+    default: true
+  },
   status: {
     type: String,
     enum: ['pending', 'approved', 'cancelled', 'completed'],

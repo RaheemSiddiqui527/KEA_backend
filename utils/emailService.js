@@ -128,7 +128,7 @@ export const sendApprovalEmail = async (userEmail, userName) => {
             </ul>
             
             <div style="text-align: center;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login" class="btn">
+              <a href="${process.env.FRONTEND_URL || 'https://user.kea.nexcorealliance.com'}/login" class="btn">
                 🚀 Login to Your Account
               </a>
             </div>
@@ -225,5 +225,164 @@ export const sendRejectionEmail = async (userEmail, userName, reason = '') => {
   } catch (error) {
     console.error('Error sending rejection email:', error);
     throw error;
+  }
+};
+
+// =====================
+// EVENT EMAILS
+// =====================
+
+export const sendEventRegistrationEmail = async (userEmail, userName, eventTitle) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: userEmail,
+    subject: `📋 Registration Received: ${eventTitle}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <div style="background: #0d9488; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0;">Event Registration</h1>
+        </div>
+        <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
+          <p>Hi <strong>${userName}</strong>,</p>
+          <p>Your registration request for <strong>${eventTitle}</strong> has been received.</p>
+          <div style="background: #f0fdfa; border-left: 4px solid #0d9488; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Status:</strong> Pending Approval</p>
+            <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">The organizer will review your request shortly.</p>
+          </div>
+          <p>You will receive another email once your registration is confirmed.</p>
+          <p>Best regards,<br/>KEA Team</p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error('Error sending event registration email:', error);
+  }
+};
+
+export const sendEventApprovalEmail = async (userEmail, userName, eventTitle) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: userEmail,
+    subject: `✅ Registration Confirmed: ${eventTitle}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <div style="background: #059669; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0;">Registration Approved!</h1>
+        </div>
+        <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
+          <p>Hi <strong>${userName}</strong>,</p>
+          <p>Great news! Your registration for <strong>${eventTitle}</strong> has been <strong>APPROVED</strong>.</p>
+          <div style="background: #ecfdf5; border-left: 4px solid #059669; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;">You are now officially registered for this event.</p>
+          </div>
+          <p>See you there!</p>
+          <p>Best regards,<br/>KEA Team</p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error('Error sending event approval email:', error);
+  }
+};
+
+// =====================
+// GROUP EMAILS
+// =====================
+
+export const sendGroupJoinRequestEmail = async (userEmail, userName, groupName) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: userEmail,
+    subject: `📋 Join Request: ${groupName}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <div style="background: #2563eb; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0;">Group Join Request</h1>
+        </div>
+        <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
+          <p>Hi <strong>${userName}</strong>,</p>
+          <p>Your request to join the group <strong>${groupName}</strong> has been submitted.</p>
+          <div style="background: #eff6ff; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Status:</strong> Waiting for Admin Approval</p>
+          </div>
+          <p>We'll notify you once the group admin reviews your request.</p>
+          <p>Best regards,<br/>KEA Team</p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error('Error sending group join request email:', error);
+  }
+};
+
+export const sendGroupApprovalEmail = async (userEmail, userName, groupName) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: userEmail,
+    subject: `🎉 Welcome to ${groupName}!`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <div style="background: #1d4ed8; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0;">Join Request Approved</h1>
+        </div>
+        <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
+          <p>Hi <strong>${userName}</strong>,</p>
+          <p>Welcome! Your request to join <strong>${groupName}</strong> has been <strong>APPROVED</strong>.</p>
+          <div style="background: #eff6ff; border-left: 4px solid #1d4ed8; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;">You can now participate in discussions and view group content.</p>
+          </div>
+          <p>Happy networking!</p>
+          <p>Best regards,<br/>KEA Team</p>
+        </div>
+      </div>
+    `
+  };
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error('Error sending group approval email:', error);
+  }
+};
+
+export const sendAdminNotificationEmail = async (adminEmail, subject, title, message) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: adminEmail,
+    subject: `🔔 Admin Alert: ${subject}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333; border: 1px solid #eee; border-radius: 8px; overflow: hidden;">
+        <div style="background: #1e293b; padding: 20px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 20px;">Admin Notification</h1>
+        </div>
+        <div style="padding: 20px;">
+          <h2 style="color: #1e293b; margin-top: 0;">${title}</h2>
+          <p style="font-size: 16px; line-height: 1.5; color: #475569;">${message}</p>
+          <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
+            <a href="${process.env.ADMIN_URL || 'http://localhost:4100'}/admin/login" 
+               style="display: inline-block; background: #0f172a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500;">
+              Go to Admin Panel
+            </a>
+          </div>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error('Error sending admin notification email:', error);
   }
 };

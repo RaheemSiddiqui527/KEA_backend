@@ -108,6 +108,17 @@ const groupSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  pendingMembers: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    requestedAt: {
+      type: Date,
+      default: Date.now
+    },
+    message: String
+  }],
   posts: [postSchema],
   resources: [{
     title: String,
@@ -131,7 +142,7 @@ const groupSchema = new mongoose.Schema({
     },
     requireApproval: {
       type: Boolean,
-      default: false
+      default: true
     },
     allowInvites: {
       type: Boolean,

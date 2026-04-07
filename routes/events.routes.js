@@ -7,7 +7,10 @@ import {
   registerForEvent,
   unregisterFromEvent,
   getCalendarEvents,
-  getUserEvents
+  getUserEvents,
+  getPendingRegistrations,
+  approveRegistration,
+  rejectRegistration
 } from '../controllers/events.controller.js';
 
 const router = express.Router();
@@ -22,5 +25,10 @@ router.post('/', auth, createEvent);
 router.post('/:id/register', auth, registerForEvent);
 router.post('/:id/unregister', auth, unregisterFromEvent);
 router.get('/user/my-events', auth, getUserEvents);
+
+// Registration management
+router.get('/:id/requests', auth, getPendingRegistrations);
+router.post('/:id/requests/:userId/approve', auth, approveRegistration);
+router.post('/:id/requests/:userId/reject', auth, rejectRegistration);
 
 export default router;
