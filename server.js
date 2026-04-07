@@ -1,5 +1,6 @@
-import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
+import express from "express";
 import morgan from "morgan";
 import cors from "cors";
 import path from "path";
@@ -29,8 +30,6 @@ import galleryRoutes from "./routes/gallery.routes.js";
 import userSettingsRoutes from "./routes/userSettings.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import upload from "./utils/upload.js";
-
-dotenv.config();
 
 const app = express();
 
