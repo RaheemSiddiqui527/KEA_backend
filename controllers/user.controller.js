@@ -55,6 +55,27 @@ export const updateMe = async (req, res, next) => {
   }
 };
 
+// Update notification preferences
+export const updatePreferences = async (req, res, next) => {
+  try {
+    const { notificationPreferences } = req.body;
+    
+    if (!notificationPreferences) {
+      return res.status(400).json({ message: 'Preferences required' });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { notificationPreferences } },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Get user dashboard stats
 export const getDashboardStats = async (req, res, next) => {
   try {
@@ -530,6 +551,7 @@ export const getMyConnections = async (req, res, next) => {
 export default {
   getMe,
   updateMe,
+  updatePreferences,
   getDashboardStats,
   getRecentActivity,
   getUserNotifications,

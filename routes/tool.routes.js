@@ -1,5 +1,5 @@
 import express from 'express';
-import { auth } from '../middleware/auth.middleware.js';
+import { auth, optionalAuth } from '../middleware/auth.middleware.js';
 import {
   getAllTools,
   getToolById,
@@ -12,10 +12,10 @@ import {
 
 const router = express.Router();
 
-// Public routes
-router.get('/categories/stats', getCategoryStats);
-router.get('/', getAllTools);
-router.get('/:id', getToolById);
+// Public routes (with optional auth for admin view)
+router.get('/categories/stats', optionalAuth, getCategoryStats);
+router.get('/', optionalAuth, getAllTools);
+router.get('/:id', optionalAuth, getToolById);
 router.post('/:id/download', incrementDownloads);
 
 // Protected routes

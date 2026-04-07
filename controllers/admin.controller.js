@@ -10,8 +10,18 @@ import Feedback from "../models/feedback.models.js";
 import Mentor from "../models/mentor.models.js";
 import Thread from "../models/thread.models.js";
 import Group from "../models/group.models.js";
+import Settings from "../models/settings.model.js";
 import mongoose from "mongoose";
-import { sendRegistrationEmail, sendApprovalEmail, sendRejectionEmail } from "../utils/emailService.js";
+import nodemailer from "nodemailer";
+import fs from "fs";
+import path from "path";
+import { 
+  sendRegistrationEmail, 
+  sendApprovalEmail, 
+  sendRejectionEmail,
+  sendContentApprovalEmail,
+  sendContentRejectionEmail 
+} from "../utils/emailService.js";
 
 
 const dashboardStats = async (req, res, next) => {
@@ -97,12 +107,13 @@ const dashboardStats = async (req, res, next) => {
     /* ======================
        🔥 ACTIVITY LOG
     ====================== */
-    const [recentUsers, recentJobs, recentBlogs, recentThreads] =
+    const [recentUsers, recentJobs, recentBlogs, recentThreads, recentFeedbacks] =
       await Promise.all([
         User.find().sort({ createdAt: -1 }).limit(3).select("name createdAt"),
         Job.find().sort({ createdAt: -1 }).limit(3).select("title createdAt"),
         Blog.find().sort({ createdAt: -1 }).limit(3).select("title createdAt"),
         Thread.find().sort({ createdAt: -1 }).limit(3).select("title createdAt"),
+        Feedback.find().sort({ createdAt: -1 }).limit(3).select("subject createdAt"),
       ]);
 
     const activities = [
@@ -110,21 +121,31 @@ const dashboardStats = async (req, res, next) => {
         title: "New member joined",
         description: u.name,
         time: u.createdAt,
+        type: 'user'
       })),
       ...recentJobs.map(j => ({
         title: "New job posted",
         description: j.title,
         time: j.createdAt,
+        type: 'job'
       })),
       ...recentBlogs.map(b => ({
         title: "New blog published",
         description: b.title,
         time: b.createdAt,
+        type: 'blog'
       })),
       ...recentThreads.map(t => ({
         title: "New forum thread created",
         description: t.title,
         time: t.createdAt,
+        type: 'thread'
+      })),
+      ...recentFeedbacks.map(f => ({
+        title: "New feedback received",
+        description: f.subject,
+        time: f.createdAt,
+        type: 'feedback'
       })),
     ].sort((a, b) => new Date(b.time) - new Date(a.time));
 
@@ -274,6 +295,86 @@ const getAdminStats = async (req, res, next) => {
   }
 };
 
+const getAnalyticsData = async (req, res, next) => {
+  try {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const [
+      locationStats,
+      jobCategoryStats,
+      blogCategoryStats,
+      feedbackStats,
+      memberGrowth,
+      contentGrowth
+    ] = await Promise.all([
+      // 1. Members by Location (top 5)
+      User.aggregate([
+        { $match: { "profile.location": { $exists: true, $ne: "" } } },
+        { $group: { _id: "$profile.location", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]),
+
+      // 2. Jobs by Category
+      Job.aggregate([
+        { $group: { _id: "$category", count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+
+      // 3. Blogs by Category
+      Blog.aggregate([
+        { $group: { _id: "$category", count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+
+      // 4. Feedback Statuses
+      Feedback.aggregate([
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ]),
+
+      // 5. Member Growth Trend (Last 6 Months)
+      User.aggregate([
+        { $match: { createdAt: { $gte: sixMonthsAgo } } },
+        {
+          $group: {
+            _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" } },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } }
+      ]),
+
+      // 6. Overall Content Growth (Jobs + Blogs Combined)
+      Promise.all([
+        Job.countDocuments({ createdAt: { $gte: sixMonthsAgo } }),
+        Blog.countDocuments({ createdAt: { $gte: sixMonthsAgo } }),
+        Event.countDocuments({ createdAt: { $gte: sixMonthsAgo } })
+      ])
+    ]);
+
+    res.json({
+      locations: locationStats,
+      categories: {
+        jobs: jobCategoryStats,
+        blogs: blogCategoryStats
+      },
+      feedback: feedbackStats,
+      trends: {
+        members: memberGrowth,
+        content: {
+          jobs: contentGrowth[0],
+          blogs: contentGrowth[1],
+          events: contentGrowth[2]
+        }
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 
 // Members
 const getMemberById = async (req, res, next) => {
@@ -415,6 +516,16 @@ const approveJob = async (req, res, next) => {
       { new: true }
     ).populate("postedBy", "name email");
     if (!job) return res.status(404).json({ message: "Job not found" });
+    
+    // Send approval email
+    try {
+      if (job.postedBy && job.postedBy.email) {
+        await sendContentApprovalEmail(job.postedBy.email, job.postedBy.name, 'Job Posting', job.title);
+      }
+    } catch (err) {
+      console.error("Error sending job approval email:", err);
+    }
+
     res.json(job);
   } catch (err) {
     next(err);
@@ -429,6 +540,16 @@ const rejectJob = async (req, res, next) => {
       { new: true }
     ).populate("postedBy", "name email");
     if (!job) return res.status(404).json({ message: "Job not found" });
+
+    // Send rejection email
+    try {
+      if (job.postedBy && job.postedBy.email) {
+        await sendContentRejectionEmail(job.postedBy.email, job.postedBy.name, 'Job Posting', job.title);
+      }
+    } catch (err) {
+      console.error("Error sending job rejection email:", err);
+    }
+
     res.json(job);
   } catch (err) {
     next(err);
@@ -474,6 +595,16 @@ const approveBlog = async (req, res, next) => {
       { new: true }
     ).populate("author", "name email");
     if (!blog) return res.status(404).json({ message: "Blog not found" });
+
+    // Send approval email
+    try {
+      if (blog.author && blog.author.email) {
+        await sendContentApprovalEmail(blog.author.email, blog.author.name, 'Blog Post', blog.title);
+      }
+    } catch (err) {
+      console.error("Error sending blog approval email:", err);
+    }
+
     res.json(blog);
   } catch (err) {
     next(err);
@@ -488,6 +619,16 @@ const rejectBlog = async (req, res, next) => {
       { new: true }
     ).populate("author", "name email");
     if (!blog) return res.status(404).json({ message: "Blog not found" });
+
+    // Send rejection email
+    try {
+      if (blog.author && blog.author.email) {
+        await sendContentRejectionEmail(blog.author.email, blog.author.name, 'Blog Post', blog.title);
+      }
+    } catch (err) {
+      console.error("Error sending blog rejection email:", err);
+    }
+
     res.json(blog);
   } catch (err) {
     next(err);
@@ -561,15 +702,24 @@ const rejectEvent = async (req, res, next) => {
 // =====================
 const getAllGallery = async (req, res, next) => {
   try {
-    const { category, search, page = 1, limit = 20 } = req.query;
+    const { category, search, status, page = 1, limit = 20 } = req.query;
     const query = {};
 
     if (category && category !== 'All photos') {
       query.category = category;
     }
 
+    if (status === 'approved') {
+      query.isApproved = true;
+    } else if (status === 'pending') {
+      query.isApproved = false;
+    }
+
     if (search) {
-      query.$text = { $search: search };
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -617,6 +767,16 @@ const approveGallery = async (req, res, next) => {
     ).populate('uploadedBy', 'name email');
 
     if (!item) return res.status(404).json({ message: "Gallery item not found" });
+
+    // Send approval email
+    try {
+      if (item.uploadedBy && item.uploadedBy.email) {
+        await sendContentApprovalEmail(item.uploadedBy.email, item.uploadedBy.name, 'Gallery Item', item.title);
+      }
+    } catch (err) {
+      console.error("Error sending gallery approval email:", err);
+    }
+
     res.json(item);
   } catch (err) {
     next(err);
@@ -625,8 +785,18 @@ const approveGallery = async (req, res, next) => {
 
 const rejectGallery = async (req, res, next) => {
   try {
-    const item = await Gallery.findByIdAndDelete(req.params.id);
+    const item = await Gallery.findByIdAndDelete(req.params.id).populate('uploadedBy', 'name email');
     if (!item) return res.status(404).json({ message: "Gallery item not found" });
+
+    // Send rejection email
+    try {
+      if (item.uploadedBy && item.uploadedBy.email) {
+        await sendContentRejectionEmail(item.uploadedBy.email, item.uploadedBy.name, 'Gallery Item', item.title);
+      }
+    } catch (err) {
+      console.error("Error sending gallery rejection email:", err);
+    }
+
     res.json({ message: "Gallery item rejected and deleted" });
   } catch (err) {
     next(err);
@@ -1227,15 +1397,23 @@ const changePassword = async (req, res, next) => {
 // Settings & Backup
 const getSettings = async (req, res, next) => {
   try {
-    const settings = {
-      siteName: "KEA Admin Portal",
-      siteUrl: "",
-      adminEmail: "",
-      contactEmail: "",
-      allowRegistration: true,
-      requireEmailVerification: true,
-      defaultMembershipStatus: "pending",
-    };
+    let settings = await Settings.findOne();
+    if (!settings) {
+      // Return defaults if none in DB
+      settings = {
+        siteName: "KEA Admin Portal",
+        siteUrl: "",
+        adminEmail: "",
+        contactEmail: "",
+        allowRegistration: true,
+        requireEmailVerification: true,
+        defaultMembershipStatus: "pending",
+        autoApproveMembers: false,
+        autoApproveJobs: false,
+        autoApproveBlogs: false,
+        autoApproveEvents: false,
+      };
+    }
     res.json(settings);
   } catch (err) {
     next(err);
@@ -1244,7 +1422,12 @@ const getSettings = async (req, res, next) => {
 
 const updateSettings = async (req, res, next) => {
   try {
-    res.json(req.body);
+    const updatedSettings = await Settings.findOneAndUpdate(
+      {},
+      { $set: req.body },
+      { upsert: true, new: true, runValidators: false }
+    );
+    res.json(updatedSettings);
   } catch (err) {
     next(err);
   }
@@ -1252,16 +1435,17 @@ const updateSettings = async (req, res, next) => {
 
 const createBackup = async (req, res, next) => {
   try {
-    const [users, jobs, blogs, events, tools, resources, seminars, gallery, feedback] = await Promise.all([
-      User.find(),
-      Job.find(),
-      Blog.find(),
-      Event.find(),
-      Tool.find(),
-      Resource.find(),
-      Seminar.find(),
-      Gallery.find(),
-      Feedback.find(),
+    const [users, jobs, blogs, events, tools, resources, seminars, gallery, feedback, groups] = await Promise.all([
+      User.find().lean(),
+      Job.find().lean(),
+      Blog.find().lean(),
+      Event.find().lean(),
+      Tool.find().lean(),
+      Resource.find().lean(),
+      Seminar.find().lean(),
+      Gallery.find().lean(),
+      Feedback.find().lean(),
+      Group.find().lean(),
     ]);
 
     const backup = {
@@ -1275,6 +1459,7 @@ const createBackup = async (req, res, next) => {
       seminars,
       gallery,
       feedback,
+      groups,
     };
 
     res.json(backup);
@@ -1285,9 +1470,15 @@ const createBackup = async (req, res, next) => {
 
 const restoreBackup = async (req, res, next) => {
   try {
+    // This is a simplified restore. In production, we'd use a more careful approach.
     const backup = req.body;
+    
+    if (!backup || !backup.users) {
+      return res.status(400).json({ message: "Invalid backup format" });
+    }
+
     await Promise.all([
-      User.deleteMany({}),
+      User.deleteMany({ role: { $ne: 'admin' } }), // Keep current admin to avoid lockout
       Job.deleteMany({}),
       Blog.deleteMany({}),
       Event.deleteMany({}),
@@ -1296,10 +1487,14 @@ const restoreBackup = async (req, res, next) => {
       Seminar.deleteMany({}),
       Gallery.deleteMany({}),
       Feedback.deleteMany({}),
+      Group.deleteMany({}),
     ]);
 
+    // Re-insert. Filter out the admin from user insert if they already exist
+    const usersToInsert = backup.users.filter(u => u.role !== 'admin');
+
     await Promise.all([
-      User.insertMany(backup.users),
+      User.insertMany(usersToInsert),
       Job.insertMany(backup.jobs),
       Blog.insertMany(backup.blogs),
       Event.insertMany(backup.events),
@@ -1308,9 +1503,10 @@ const restoreBackup = async (req, res, next) => {
       Seminar.insertMany(backup.seminars || []),
       Gallery.insertMany(backup.gallery || []),
       Feedback.insertMany(backup.feedback || []),
+      Group.insertMany(backup.groups || []),
     ]);
 
-    res.json({ message: "Backup restored successfully" });
+    res.json({ message: "Backup restored successfully. Note: Admin account was preserved." });
   } catch (err) {
     next(err);
   }
@@ -1318,9 +1514,34 @@ const restoreBackup = async (req, res, next) => {
 
 const sendTestEmail = async (req, res, next) => {
   try {
-    res.json({ message: "Test email functionality not implemented" });
+    const { smtpHost, smtpPort, smtpUsername, smtpPassword, smtpFromEmail, adminEmail } = req.body;
+
+    if (!smtpHost || !smtpUsername || !smtpPassword) {
+      return res.status(400).json({ message: "Incomplete SMTP configuration" });
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort) || 587,
+      secure: parseInt(smtpPort) === 465,
+      auth: {
+        user: smtpUsername,
+        pass: smtpPassword,
+      },
+    });
+
+    await transporter.sendMail({
+      from: smtpFromEmail || smtpUsername,
+      to: adminEmail || smtpUsername,
+      subject: "KEA Admin: SMTP Test Email",
+      text: "This is a test email from the KEA Admin Panel settings. Your SMTP configuration is working correctly!",
+      html: "<h3>KEA Admin Panel</h3><p>Your SMTP configuration is working correctly!</p>"
+    });
+
+    res.json({ message: "Test email sent successfully!" });
   } catch (err) {
-    next(err);
+    console.error("SMTP Test Error:", err);
+    res.status(500).json({ message: "Failed to send test email: " + err.message });
   }
 };
 const getAllGroups = async (req, res, next) => {
@@ -1549,5 +1770,6 @@ export default {
   pendingGroups,
   approveGroup,
   rejectGroup,
-  deleteGroup
+  deleteGroup,
+  getAnalyticsData
 };

@@ -58,6 +58,8 @@ const JobSchema = new mongoose.Schema({
     default: []
   },
 
+  category: String,
+  experience: String,
   company: { 
     type: String,
     required: true
@@ -83,6 +85,12 @@ const JobSchema = new mongoose.Schema({
     default: 'pending' 
   },
   applyUrl: String,
+  skills: [String],
+  companyInfo: {
+    website: String,
+    size: String,
+    industry: String
+  },
   tags: [String]
 }, { timestamps: true });
 

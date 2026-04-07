@@ -13,7 +13,7 @@ const gallerySchema = new mongoose.Schema({
   },
   imageUrl: {
     type: String,
-    required: true
+    required: false
   },
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,

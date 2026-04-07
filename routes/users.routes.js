@@ -10,6 +10,7 @@ const router = express.Router();
 const {
   getMe,
   updateMe,
+  updatePreferences,
   getDashboardStats,
   getRecentActivity,
   getUserNotifications,
@@ -40,6 +41,7 @@ router.use(auth);
 // User profile
 router.get('/me', getMe);
 router.patch('/me', updateMe);
+router.patch('/me/preferences', updatePreferences);
 
 // Dashboard
 router.get('/dashboard/stats', getDashboardStats);

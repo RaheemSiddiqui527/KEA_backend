@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Seminar from '../models/seminar.models.js';
+import Activity from '../models/activity.models.js';
 
 // Get all seminars (with filters + pagination)
 export const getAllSeminars = async (req, res, next) => {
@@ -188,6 +189,17 @@ export const registerForSeminar = async (req, res, next) => {
         message: 'Cannot register: seminar is full, registration deadline has passed, or you are already registered'
       });
     }
+
+    // Create activity for My Profile integration
+    await Activity.create({
+      user: userId,
+      type: 'event_registration',
+      title: 'Seminar Registration',
+      description: `Registered for: ${seminar.title}`,
+      relatedId: seminarId,
+      relatedModel: 'Seminar',
+      status: 'upcoming'
+    }).catch(err => console.log('⚠️ Seminar Activity creation failed:', err));
 
     res.json({ 
       message: 'Registration successful', 

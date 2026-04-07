@@ -107,6 +107,15 @@ const UserSchema = new mongoose.Schema(
     // Password reset fields
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
+
+    // Notification Preferences
+    notificationPreferences: {
+      email: { type: Boolean, default: true },
+      jobUpdates: { type: Boolean, default: true },
+      eventReminders: { type: Boolean, default: true },
+      newsletter: { type: Boolean, default: true },
+      communityActivity: { type: Boolean, default: true },
+    },
   },
   { timestamps: true }
 );

@@ -3,6 +3,8 @@
 
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import User from '../models/user.models.js';
+
 dotenv.config();
 
 let transporter;
@@ -376,6 +378,67 @@ export const sendGroupApprovalEmail = async (userEmail, userName, groupName) => 
   }
 };
 
+export const sendContentApprovalEmail = async (userEmail, userName, contentType, contentTitle) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: userEmail,
+    subject: `✅ Approved: Your ${contentType} "${contentTitle}" is live!`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <div style="background: #10b981; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0;">Content Approved!</h1>
+        </div>
+        <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
+          <p>Hi <strong>${userName}</strong>,</p>
+          <p>Your submitted ${contentType.toLowerCase()} <strong>"${contentTitle}"</strong> has been reviewed and <strong>APPROVED</strong> by our admin team.</p>
+          <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;">It is now live on the KEA platform for all members to see.</p>
+          </div>
+          <p>Thank you for contributing to the KEA community!</p>
+          <p>Best regards,<br/>KEA Admin Team</p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await getTransporter().sendMail(mailOptions);
+  } catch (error) {
+    console.error(`Error sending ${contentType} approval email:`, error);
+  }
+};
+
+export const sendContentRejectionEmail = async (userEmail, userName, contentType, contentTitle, reason = '') => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: userEmail,
+    subject: `❌ Update: Your ${contentType} "${contentTitle}" status`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <div style="background: #ef4444; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0;">Content Status Update</h1>
+        </div>
+        <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
+          <p>Hi <strong>${userName}</strong>,</p>
+          <p>Regarding your submitted ${contentType.toLowerCase()} <strong>"${contentTitle}"</strong>.</p>
+          <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Status:</strong> Not Approved</p>
+            ${reason ? `<p style="margin: 10px 0 0 0;"><strong>Reason:</strong> ${reason}</p>` : ''}
+          </div>
+          <p>If you have any questions or would like to resubmit with changes, please contact the admin team.</p>
+          <p>Best regards,<br/>KEA Admin Team</p>
+        </div>
+      </div>
+    `
+  };
+
+  try {
+    await getTransporter().sendMail(mailOptions);
+  } catch (error) {
+    console.error(`Error sending ${contentType} rejection email:`, error);
+  }
+};
+
 export const sendAdminNotificationEmail = async (adminEmail, subject, title, message) => {
   const mailOptions = {
     from: process.env.EMAIL_USER,
@@ -390,7 +453,7 @@ export const sendAdminNotificationEmail = async (adminEmail, subject, title, mes
           <h2 style="color: #1e293b; margin-top: 0;">${title}</h2>
           <p style="font-size: 16px; line-height: 1.5; color: #475569;">${message}</p>
           <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
-            <a href="${process.env.ADMIN_URL || 'http://localhost:4100'}/admin/login" 
+            <a href="${process.env.ADMIN_URL || 'https://admin.kea.nexcorealliance.com'}/admin/login" 
                style="display: inline-block; background: #0f172a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500;">
               Go to Admin Panel
             </a>

@@ -61,6 +61,7 @@ router.use(requireRole('admin'));
 
 router.get('/dashboard', adminReadLimiter, AdminController.dashboardStats);
 router.get('/stats', adminReadLimiter, AdminController.getAdminStats);
+router.get('/analytics', adminReadLimiter, AdminController.getAnalyticsData);
 
 // =====================
 // MEMBERS ROUTES
@@ -197,7 +198,7 @@ router.patch('/settings', adminSensitiveLimiter, AdminController.updateSettings)
 // CRITICAL OPERATIONS (Very Restricted)
 // =====================
 
-router.post('/backup', adminCriticalLimiter, AdminController.createBackup);
+router.get('/backup', adminCriticalLimiter, AdminController.createBackup);
 router.post('/restore', adminCriticalLimiter, AdminController.restoreBackup);
 router.post('/test-email', adminSensitiveLimiter, AdminController.sendTestEmail);
 

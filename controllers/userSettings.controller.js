@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 // Get user settings
 export const getUserSettings = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('name email phone profile settings');
+    const user = await User.findById(req.user._id).select('name email phone profile settings notificationPreferences');
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -64,11 +64,11 @@ export const updateNotificationSettings = async (req, res) => {
       req.user._id,
       {
         $set: {
-          'settings.notifications.email': email,
-          'settings.notifications.jobUpdates': jobUpdates,
-          'settings.notifications.eventReminders': eventReminders,
-          'settings.notifications.newsletter': newsletter,
-          'settings.notifications.communityActivity': communityActivity
+          'notificationPreferences.email': email,
+          'notificationPreferences.jobUpdates': jobUpdates,
+          'notificationPreferences.eventReminders': eventReminders,
+          'notificationPreferences.newsletter': newsletter,
+          'notificationPreferences.communityActivity': communityActivity
         }
       },
       { new: true, runValidators: false }
@@ -78,7 +78,7 @@ export const updateNotificationSettings = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    res.json({ message: 'Notification preferences updated successfully', settings: user.settings });
+    res.json({ message: 'Notification preferences updated successfully', settings: user.settings, notificationPreferences: user.notificationPreferences });
   } catch (err) {
     console.error('❌ Error in updateNotificationSettings:', err);
     res.status(500).json({ message: 'Error updating notifications', error: err.message });

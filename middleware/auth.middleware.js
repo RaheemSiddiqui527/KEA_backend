@@ -15,6 +15,26 @@ export const auth = async (req, res, next) => {
     return res.status(401).json({ message: 'Authentication failed' });
   }
 };
+
+// Optional auth (doesn't fail if token missing)
+export const optionalAuth = async (req, res, next) => {
+  try {
+    const header = req.headers.authorization;
+    if (!header) return next();
+    
+    const token = header.split(' ')[1];
+    if (!token) return next();
+
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(payload.id);
+    if (user) req.user = user;
+    
+    next();
+  } catch (err) {
+    // Just move on if token invalid
+    next();
+  }
+};
 // middleware/admin.middleware.js
 export const isAdmin = (req, res, next) => {
   try {
