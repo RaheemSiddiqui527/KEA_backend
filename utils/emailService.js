@@ -2,15 +2,35 @@
 // Add this to your backend services folder
 
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Configure your email transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail', // or your email service
-  auth: {
-    user: process.env.EMAIL_USER, // your email
-    pass: process.env.EMAIL_PASS, // your email password or app password
-  },
-});
+let transporter;
+
+// Lazy initialization of transporter
+const getTransporter = () => {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // Use SSL
+      auth: {
+        user: process.env.EMAIL_USER, // your email
+        pass: process.env.EMAIL_PASS, // your email password or app password
+      },
+    });
+
+    // Verify connection configuration
+    transporter.verify((error, success) => {
+      if (error) {
+        console.log('❌ Email Service Error:', error);
+      } else {
+        console.log('✅ Email Service is ready to send messages');
+      }
+    });
+  }
+  return transporter;
+};
 
 // Send registration confirmation email
 export const sendRegistrationEmail = async (userEmail, userName) => {
@@ -75,7 +95,7 @@ export const sendRegistrationEmail = async (userEmail, userName) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
     console.log('Registration email sent to:', userEmail);
   } catch (error) {
     console.error('Error sending registration email:', error);
@@ -154,7 +174,7 @@ export const sendApprovalEmail = async (userEmail, userName) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
     console.log('Approval email sent to:', userEmail);
   } catch (error) {
     console.error('Error sending approval email:', error);
@@ -220,7 +240,7 @@ export const sendRejectionEmail = async (userEmail, userName, reason = '') => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
     console.log('Rejection email sent to:', userEmail);
   } catch (error) {
     console.error('Error sending rejection email:', error);
@@ -257,7 +277,7 @@ export const sendEventRegistrationEmail = async (userEmail, userName, eventTitle
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
   } catch (error) {
     console.error('Error sending event registration email:', error);
   }
@@ -287,7 +307,7 @@ export const sendEventApprovalEmail = async (userEmail, userName, eventTitle) =>
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
   } catch (error) {
     console.error('Error sending event approval email:', error);
   }
@@ -321,7 +341,7 @@ export const sendGroupJoinRequestEmail = async (userEmail, userName, groupName) 
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
   } catch (error) {
     console.error('Error sending group join request email:', error);
   }
@@ -350,7 +370,7 @@ export const sendGroupApprovalEmail = async (userEmail, userName, groupName) => 
     `
   };
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
   } catch (error) {
     console.error('Error sending group approval email:', error);
   }
@@ -381,7 +401,7 @@ export const sendAdminNotificationEmail = async (adminEmail, subject, title, mes
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    await getTransporter().sendMail(mailOptions);
   } catch (error) {
     console.error('Error sending admin notification email:', error);
   }
