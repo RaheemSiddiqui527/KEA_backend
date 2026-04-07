@@ -11,6 +11,7 @@ import Mentor from "../models/mentor.models.js";
 import Thread from "../models/thread.models.js";
 import Group from "../models/group.models.js";
 import mongoose from "mongoose";
+import { sendRegistrationEmail, sendApprovalEmail, sendRejectionEmail } from "../utils/emailService.js";
 
 
 const dashboardStats = async (req, res, next) => {
