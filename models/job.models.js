@@ -43,46 +43,54 @@ import mongoose from 'mongoose';
 // Text index for search
 
 const JobSchema = new mongoose.Schema({
-  title: { 
-    type: String, 
-    required: true 
+  title: {
+    type: String,
+    required: true
   },
-  description: { 
+  description: {
     type: String,
     required: true
   },
 
   // ✅ FIX HERE
   requirements: {
-    type: [String],
-    default: []
+    type: [String], // 👈 array of strings
+    required: true,
+    validate: {
+      validator: function (val) {
+        return val.length > 0;
+      },
+      message: 'At least one requirement is required'
+    }
   },
+  minExperience: String,
+  qualification: String,
 
   category: String,
   experience: String,
-  company: { 
+  company: {
     type: String,
     required: true
   },
-  location: { 
+  location: {
     type: String,
     required: true
   },
-  type: { 
+  type: {
     type: String,
     enum: ['Full-time', 'Part-time', 'Contract', 'Remote', 'Internship'],
     required: true
   },
   salary: String,
-  postedBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  postedBy: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  status: { 
-    type: String, 
-    enum: ['pending', 'approved', 'rejected'], 
-    default: 'pending' 
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
   },
   applyUrl: String,
   skills: [String],
@@ -95,10 +103,10 @@ const JobSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-JobSchema.index({ 
-  title: 'text', 
-  description: 'text', 
-  company: 'text' 
+JobSchema.index({
+  title: 'text',
+  description: 'text',
+  company: 'text'
 });
 
 export default mongoose.model('Job', JobSchema);
