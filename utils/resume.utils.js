@@ -61,14 +61,14 @@ export const extractTextFromPdf = async (filePath) => {
  * @returns {Promise<string[]>} - List of extracted skills.
  */
 export const autoFetchSkills = async (filePath) => {
-  console.log("🔍 Starting skill extraction for:", filePath);
+  // console.log("🔍 Starting skill extraction for:", filePath);
   const text = await extractTextFromPdf(filePath);
   if (!text) {
-    console.log("❌ No text extracted from PDF");
+    // console.log("❌ No text extracted from PDF");
     return [];
   }
-  console.log("📄 Extracted text (first 100 chars):", text.substring(0, 100));
+  // console.log("📄 Extracted text (first 100 chars):", text.substring(0, 100));
   const skills = extractSkillsFromText(text);
-  console.log("✅ Matched skills:", skills);
+  // console.log("✅ Matched skills:", skills);
   return skills;
 };
