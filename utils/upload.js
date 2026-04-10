@@ -1,7 +1,6 @@
 import multer from "multer";
-import multerS3 from "multer-s3";
 import path from "path";
-import { s3 } from "../config/wasabi.client.js";
+import fs from "fs";
 
 /**
  * File filter (PDF, DOC, DOCX only)
@@ -21,21 +20,29 @@ const fileFilter = (req, file, cb) => {
 };
 
 /**
- * Multer config with Wasabi
+ * Multer Disk Storage Config
+ */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = "uploads/";
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `${Date.now()}-${Math.round(
+      Math.random() * 1e9
+    )}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+/**
+ * Multer config with Disk Storage (Switched from Wasabi)
  */
 const upload = multer({
-  storage: multerS3({
-    s3,
-    bucket: "your-bucket-name",
-    contentType: multerS3.AUTO_CONTENT_TYPE,
-    key: (req, file, cb) => {
-      const uniqueName = `${Date.now()}-${Math.round(
-        Math.random() * 1e9
-      )}${path.extname(file.originalname)}`;
-
-      cb(null, `uploads/${uniqueName}`);
-    },
-  }),
+  storage: storage,
   fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB
@@ -43,3 +50,4 @@ const upload = multer({
 });
 
 export default upload;
+

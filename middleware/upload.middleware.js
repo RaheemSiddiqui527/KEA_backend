@@ -1,16 +1,15 @@
 import multer from "multer";
-import multerS3 from "multer-s3";
 import path from "path";
+import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
-import { s3 } from "../config/wasabi.client.js";
 
 dotenv.config();
 
-const BUCKET = process.env.AWS_BUCKET_NAME;
-
-if (!BUCKET) {
-  throw new Error("AWS_BUCKET_NAME is not defined in .env");
+// Ensure upload directory exists
+const UPLOAD_PATH = "uploads/documents";
+if (!fs.existsSync(UPLOAD_PATH)) {
+  fs.mkdirSync(UPLOAD_PATH, { recursive: true });
 }
 
 /**
@@ -28,9 +27,32 @@ const fileFilter = (req, file, cb) => {
 };
 
 /**
- * Multer Wasabi Config
+ * Multer Disk Storage Config (Switched from Wasabi)
+ */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOAD_PATH);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${uuidv4()}${ext}`);
+  },
+});
+
+/**
+ * Multer Config
  */
 const upload = multer({
+  storage: storage,
+  fileFilter,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
+});
+
+/* WASABI STORAGE CONFIG (COMMENTED OUT)
+import multerS3 from "multer-s3";
+import { s3 } from "../config/wasabi.client.js";
+const BUCKET = process.env.AWS_BUCKET_NAME;
+const uploadS3 = multer({
   storage: multerS3({
     s3,
     bucket: BUCKET,
@@ -43,5 +65,7 @@ const upload = multer({
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
+*/
 
 export default upload;
+

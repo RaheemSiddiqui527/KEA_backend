@@ -120,9 +120,12 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:"],
+        frameAncestors: ["'self'", "http://localhost:3000", "http://localhost:3001"], // Allow these origins to embed
       },
     },
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin resource sharing
+    frameguard: false, // Disable X-Frame-Options to allow CSP frame-ancestors to take over
   })
 );
 
@@ -201,12 +204,21 @@ const __dirname = path.dirname(__filename);
 
 connectDB(process.env.MONGO_URI);
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.post("/upload", upload.single("file"), async (req, res, next) => {
+  /*
   const { key } = await uploadFileToS3(req.file);
 
   res.json({
     message: "File uploaded successfully",
     key,
+  });
+  */
+  res.json({
+    message: "File uploaded successfully to local storage",
+    path: req.file.path
   });
 });
 

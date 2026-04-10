@@ -16,6 +16,7 @@ const {
   getUserNotifications,
   markNotificationRead,
   uploadResume,
+  viewResume,
   getMyResumes,
   deleteResume,
   listMembers,
@@ -55,18 +56,7 @@ router.patch('/notifications/:id/read', markNotificationRead);
 router.post('/me/resumes', upload.single('file'), uploadResume);
 router.get('/me/resumes', getMyResumes);
 router.delete('/me/resumes/:id', deleteResume);
-
-router.get('/me/resumes/:id/view', async (req, res) => {
-  const resume = await Resume.findOne({
-    _id: req.params.id,
-    user: req.user._id,
-  });
-
-  if (!resume) return res.sendStatus(404);
-
-  const signedUrl = await getSignedWasabiUrl(resume.wasabiKey);
-  res.json({ url: signedUrl });
-});
+router.get('/me/resumes/:id/view', viewResume);
 
 // Jobs
 router.post('/jobs/save', saveJob);

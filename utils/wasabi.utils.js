@@ -1,12 +1,12 @@
-import {
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+// import {
+//   PutObjectCommand,
+//   GetObjectCommand,
+//   DeleteObjectCommand,
+// } from "@aws-sdk/client-s3";
+// import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
-import { s3 } from "../config/wasabi.client.js";
+// import { s3 } from "../config/wasabi.client.js";
 
 const BUCKET = process.env.AWS_BUCKET_NAME;
 
@@ -19,6 +19,9 @@ export const uploadFileToWasabi = async ({
   folder,
   mimetype,
 }) => {
+  console.log("Wasabi upload disabled");
+  return { wasabiKey: null };
+  /*
   const ext = path.extname(originalName);
   const key = `${folder}/${uuidv4()}${ext}`;
 
@@ -34,12 +37,15 @@ export const uploadFileToWasabi = async ({
   );
 
   return { wasabiKey: key };
+  */
 };
 
 /**
  * Get signed URL for viewing
  */
 export const getSignedWasabiUrl = async (key) => {
+  return "";
+  /*
   return getSignedUrl(
     s3,
     new GetObjectCommand({
@@ -52,6 +58,7 @@ export const getSignedWasabiUrl = async (key) => {
     }),
     { expiresIn: 300 }
   );
+  */
 };
 
 
@@ -59,6 +66,8 @@ export const getSignedWasabiUrl = async (key) => {
  * Get file as buffer for proxy/download
  */
 export const getFileBuffer = async (key) => {
+  throw new Error("Wasabi file buffer access disabled");
+  /*
   try {
     const command = new GetObjectCommand({
       Bucket: BUCKET,
@@ -82,27 +91,28 @@ export const getFileBuffer = async (key) => {
     console.error('❌ Get buffer error:', error);
     throw new Error(`Failed to get file: ${error.message}`);
   }
+  */
 };
 
 /**
  * Delete file from Wasabi
  */
 export const deleteFromWasabi = async (key) => {
+  console.log("Wasabi delete disabled");
+  /*
   await s3.send(
     new DeleteObjectCommand({ Bucket: BUCKET, Key: key })
   );
+  */
 };
 
 // ✅ Export aliases for consistency
 export const deleteFilesFromS3 = deleteFromWasabi;
 export const getSignedS3Url = getSignedWasabiUrl;
-export const uploadFileToS3 = async (file, folder) =>
-  uploadFileToWasabi({
-    buffer: file.buffer,
-    originalName: file.originalname,
-    folder,
-    mimetype: file.mimetype,
-  });
+export const uploadFileToS3 = async (file, folder) => {
+  console.log("Wasabi upload to S3 disabled");
+  return { wasabiKey: null };
+}
 
 // ✅ Default export
 export default {

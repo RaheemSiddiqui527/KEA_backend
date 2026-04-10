@@ -1054,7 +1054,7 @@ export const getResourceById = async (req, res, next) => {
  */
 export const deleteResource = async (req, res, next) => {
   try {
-    const resource = await Resource.findByIdAndDelete(req.params.id);
+    const resource = await Resource.findById(req.params.id);
     
     if (!resource) {
       return res.status(404).json({ 
@@ -1062,6 +1062,23 @@ export const deleteResource = async (req, res, next) => {
         message: "Resource not found" 
       });
     }
+
+    // Delete local file
+    if (resource.filePath && fs.existsSync(resource.filePath)) {
+      try {
+        fs.unlinkSync(resource.filePath);
+      } catch (err) {
+        console.error("Failed to delete local file:", err);
+      }
+    }
+
+    /* WASABI LOGIC COMMENTED OUT
+    if (resource.wasabiKey) {
+       await deleteFilesFromS3(resource.wasabiKey);
+    }
+    */
+
+    await resource.deleteOne();
     
     res.json({ 
       success: true,

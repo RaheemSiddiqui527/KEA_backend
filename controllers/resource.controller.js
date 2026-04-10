@@ -1,6 +1,7 @@
 import Resource from '../models/resource.models.js';
-import { uploadFileToS3, getSignedS3Url, deleteFilesFromS3, getFileBuffer } from '../utils/wasabi.utils.js';
+// import { uploadFileToS3, getSignedS3Url, deleteFilesFromS3, getFileBuffer } from '../utils/wasabi.utils.js';
 import path from 'path';
+import fs from 'fs';
 
 /**
  * Get all resources
@@ -162,7 +163,10 @@ export const uploadResource = async (req, res) => {
           ? 'Image'
           : 'FileText';
 
+    // WASABI LOGIC COMMENTED OUT
+    /*
     const { wasabiKey } = await uploadFileToS3(req.file, 'resources');
+    */
 
     const resource = await Resource.create({
       title,
@@ -170,7 +174,8 @@ export const uploadResource = async (req, res) => {
       category,
       format,
       tags: tags ? tags.split(',').map(t => t.trim()) : [],
-      wasabiKey,
+      // wasabiKey,
+      filePath: req.file.path.replace(/\\/g, '/'), // Save local path
       mimeType: req.file.mimetype,
       fileSize: req.file.size,
       description,
@@ -180,7 +185,7 @@ export const uploadResource = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Resource uploaded successfully',
+      message: 'Resource uploaded successfully to local storage',
       resource,
     });
   } catch (error) {
@@ -193,7 +198,7 @@ export const uploadResource = async (req, res) => {
 };
 
 /**
- * View resource - Proxy the file to avoid CORS issues
+ * View resource
  */
 export const viewResource = async (req, res) => {
   try {
@@ -207,7 +212,7 @@ export const viewResource = async (req, res) => {
     }
 
     // 🔗 External links (Link / Video)
-    if (!resource.wasabiKey) {
+    if (!resource.filePath && !resource.wasabiKey) {
       return res.json({
         success: true,
         externalLink: resource.externalLink || null,
@@ -215,6 +220,22 @@ export const viewResource = async (req, res) => {
       });
     }
 
+    // Local file handling
+    if (resource.filePath) {
+      const protocol = req.protocol;
+      const host = req.get('host');
+      const url = `${protocol}://${host}/${resource.filePath}`;
+      
+      return res.json({
+        success: true,
+        url,
+        type: 'local',
+        format: resource.format,
+        mimeType: resource.mimeType,
+      });
+    }
+
+    /* WASABI LOGIC COMMENTED OUT
     // 🔥 PDF → ALWAYS PROXY (MOST IMPORTANT FIX)
     if (resource.format === 'PDF' || req.query.proxy === 'true') {
       const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
@@ -241,6 +262,9 @@ export const viewResource = async (req, res) => {
       format: resource.format,
       mimeType: resource.mimeType,
     });
+    */
+    
+    return res.status(400).json({ message: "No file found for this resource" });
   } catch (error) {
     console.error('❌ View error:', error);
     return res.status(500).json({
@@ -259,13 +283,21 @@ export const downloadResource = async (req, res) => {
   try {
     const resource = await Resource.findById(req.params.id);
 
-    if (!resource || !resource.wasabiKey) {
+    if (!resource) {
       return res.status(404).json({
         success: false,
         error: 'Resource not found',
       });
     }
 
+    if (resource.filePath && fs.existsSync(resource.filePath)) {
+      return res.download(resource.filePath, resource.title);
+    }
+
+    /* WASABI LOGIC COMMENTED OUT
+    if (!resource.wasabiKey) {
+       return res.status(404).json({ success: false, error: 'File not found' });
+    }
     // Proxy download
     const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
 
@@ -276,6 +308,9 @@ export const downloadResource = async (req, res) => {
     });
 
     return res.send(buffer);
+    */
+    
+    return res.status(404).json({ success: false, error: 'File not found localy' });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -325,15 +360,24 @@ export const updateResource = async (req, res) => {
  */
 export const deleteResource = async (req, res) => {
   try {
-    const resource = await Resource.findByIdAndDelete(req.params.id);
+    const resource = await Resource.findById(req.params.id);
 
     if (!resource) {
       return res.status(404).json({ success: false, error: 'Resource not found' });
     }
 
+    // Delete local file
+    if (resource.filePath && fs.existsSync(resource.filePath)) {
+      fs.unlinkSync(resource.filePath);
+    }
+
+    /* WASABI LOGIC COMMENTED OUT
     if (resource.wasabiKey) {
       await deleteFilesFromS3(resource.wasabiKey);
     }
+    */
+
+    await resource.deleteOne();
 
     res.json({ success: true, message: 'Resource deleted successfully' });
   } catch (error) {

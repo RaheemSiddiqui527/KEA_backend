@@ -50,6 +50,11 @@ const resourceSchema = new mongoose.Schema(
       type: String,
     },
 
+    // 🔐 Store path for local storage
+    filePath: {
+      type: String,
+    },
+
     // 🔐 For Wasabi stored files only
     wasabiKey: {
       type: String,

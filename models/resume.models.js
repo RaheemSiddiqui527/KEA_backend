@@ -13,10 +13,19 @@ const resumeSchema = new mongoose.Schema(
       required: true,
     },
 
-    // 🔐 Only store Wasabi key (secure & correct)
+    // 🔐 Store path for local storage
+    filePath: {
+      type: String,
+    },
+
+    // 🔐 Only store Wasabi key (secure & correct) - Kept for reference or backward compatibility
     wasabiKey: {
       type: String,
-      required: true,
+    },
+
+    skills: {
+      type: [String],
+      default: [],
     },
 
     originalName: String,

@@ -9,12 +9,17 @@ import Notification from '../models/notification.models.js';
 import Job from '../models/job.models.js'; // ← ADDED
 import Event from '../models/event.models.js'; // ← ADDED
 import Blog from '../models/blog.models.js'; // ← ADDED
+/*
 import {
   uploadFileToWasabi,
   getSignedWasabiUrl,
   deleteFromWasabi,
   deleteFilesFromS3
 } from "../utils/wasabi.utils.js";
+*/
+import { autoFetchSkills } from '../utils/resume.utils.js';
+import fs from 'fs';
+import path from 'path';
 
 
 
@@ -189,16 +194,55 @@ export const uploadResume = async (req, res, next) => {
       return res.status(400).json({ message: "File is required" });
     }
 
+    // Auto-fetch skills from the resume
+    let skills = [];
+    if (req.file.mimetype === 'application/pdf') {
+      skills = await autoFetchSkills(req.file.path);
+    }
+
     const resume = await Resume.create({
       user: req.user._id,
       title: req.body.title || req.file.originalname,
-      wasabiKey: req.file.key, // 🔥 IMPORTANT
+      filePath: req.file.path.replace(/\\/g, '/'), // Store relative path
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
+      skills: skills
     });
 
+    // ✅ UPDATE USER PROFILE SKILLS
+    if (skills.length > 0) {
+      await User.findByIdAndUpdate(req.user._id, {
+        $addToSet: { "profile.skills": { $each: skills } }
+      });
+      console.log(`✅ Updated skills for user ${req.user._id}:`, skills);
+    }
+
     res.status(201).json(resume);
+  } catch (err) {
+    console.error("Resume upload error:", err);
+    next(err);
+  }
+};
+
+// View resume file (Returns URL for frontend)
+export const viewResume = async (req, res, next) => {
+  try {
+    const resume = await Resume.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!resume) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
+
+    // Return the local URL for the frontend to use
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const url = `${protocol}://${host}/${resume.filePath}`;
+
+    res.json({ url });
   } catch (err) {
     next(err);
   }
@@ -221,8 +265,14 @@ export const getMyResumes = async (req, res, next) => {
 export const getResumeUrl = async (req, res, next) => {
   try {
     const resume = await Resume.findById(req.params.id);
+    if (!resume) {
+      return res.status(404).json({ message: "Resume not found" });
+    }
 
-    const url = await getSignedS3Url(resume.wasabiKey);
+    // Return the local URL
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const url = `${protocol}://${host}/${resume.filePath}`;
 
     res.json({ url });
   } catch (err) {
@@ -242,10 +292,17 @@ export const deleteResume = async (req, res, next) => {
       return res.status(404).json({ message: "Resume not found" });
     }
 
+    // Delete local file
+    if (resume.filePath && fs.existsSync(resume.filePath)) {
+      fs.unlinkSync(resume.filePath);
+    }
+
+    // Backward compatibility for Wasabi (commented out)
+    /*
     if (resume.wasabiKey) {
       await deleteFilesFromS3(resume.wasabiKey);
-
     }
+    */
 
     await resume.deleteOne();
 
@@ -557,6 +614,7 @@ export default {
   getUserNotifications,
   markNotificationRead,
   uploadResume,
+  viewResume,
   getMyResumes,
   getResumeUrl,
   deleteResume,
