@@ -105,7 +105,11 @@ const mentorSchema = new mongoose.Schema({
       required: [true, 'Email is required'],
       match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
     },
-    linkedin: String,
+    linkedin: {
+      type: String,
+      required: [true, 'LinkedIn profile link is required'],
+      trim: true
+    },
     phone: String
   },
   stats: {

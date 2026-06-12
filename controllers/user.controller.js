@@ -43,8 +43,28 @@ export const updateMe = async (req, res, next) => {
     if (req.body.avatar) updateData.avatar = req.body.avatar;
 
     if (req.body.profile) {
-      for (const key of Object.keys(req.body.profile)) {
-        updateData[`profile.${key}`] = req.body.profile[key];
+      const profileUpdate = req.body.profile;
+
+      if ('nativeAddition' in profileUpdate) {
+        if (!profileUpdate.nativeAddition || profileUpdate.nativeAddition.trim() === '') {
+          return res.status(400).json({ message: 'Native address is required.' });
+        }
+        updateData['profile.nativeAddition'] = profileUpdate.nativeAddition.trim();
+      }
+
+      if ('skills' in profileUpdate) {
+        if (!Array.isArray(profileUpdate.skills) || profileUpdate.skills.length === 0) {
+          return res.status(400).json({ message: 'At least one skill is required.' });
+        }
+
+        updateData['profile.skills'] = profileUpdate.skills
+          .map((skill) => String(skill).trim())
+          .filter(Boolean);
+      }
+
+      for (const key of Object.keys(profileUpdate)) {
+        if (key === 'skills' || key === 'nativeAddition') continue;
+        updateData[`profile.${key}`] = profileUpdate[key];
       }
     }
 

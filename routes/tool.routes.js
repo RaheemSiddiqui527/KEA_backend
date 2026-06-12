@@ -1,5 +1,6 @@
 import express from 'express';
 import { auth, optionalAuth } from '../middleware/auth.middleware.js';
+import toolUpload from '../middleware/toolUpload.middleware.js';
 import {
   getAllTools,
   getToolById,
@@ -7,7 +8,8 @@ import {
   updateTool,
   deleteTool,
   getCategoryStats,
-  incrementDownloads
+  incrementDownloads,
+  uploadToolFile
 } from '../controllers/tool.controller.js';
 
 const router = express.Router();
@@ -20,6 +22,7 @@ router.post('/:id/download', incrementDownloads);
 
 // Protected routes
 router.post('/', auth, createTool);
+router.post('/upload-file', auth, toolUpload.single('file'), uploadToolFile);
 router.put('/:id', auth, updateTool);
 router.delete('/:id', auth, deleteTool);
 

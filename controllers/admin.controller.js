@@ -11,6 +11,7 @@ import Mentor from "../models/mentor.models.js";
 import Thread from "../models/thread.models.js";
 import Group from "../models/group.models.js";
 import Settings from "../models/settings.model.js";
+import JobApplication from "../models/JobApplication.models.js";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 import fs from "fs";
@@ -551,6 +552,48 @@ const rejectJob = async (req, res, next) => {
     }
 
     res.json(job);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Job Applications
+const getJobApplications = async (req, res, next) => {
+  try {
+    const applications = await JobApplication.find()
+      .populate("user", "name email profile")
+      .populate("job", "title company location category")
+      .populate("resume", "title filePath originalName size")
+      .sort({ createdAt: -1 });
+    res.json(applications);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateJobApplicationStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["pending", "reviewed", "accepted", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const application = await JobApplication.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    )
+      .populate("user", "name email profile")
+      .populate("job", "title company location category")
+      .populate("resume", "title filePath originalName size");
+
+    if (!application) {
+      return res.status(404).json({ message: "Job application not found" });
+    }
+
+    res.json(application);
   } catch (err) {
     next(err);
   }
@@ -1734,6 +1777,8 @@ export default {
   pendingJobs,
   approveJob,
   rejectJob,
+  getJobApplications,
+  updateJobApplicationStatus,
   pendingBlogs,
   approveBlog,
   rejectBlog,

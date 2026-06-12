@@ -185,3 +185,23 @@ export const incrementDownloads = async (req, res, next) => {
     next(error);
   }
 };
+
+// Upload tool file
+export const uploadToolFile = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const fileUrl = `${req.protocol}://${req.get('host')}/${req.file.path.replace(/\\/g, '/')}`;
+    res.status(200).json({
+      message: 'File uploaded successfully',
+      url: fileUrl,
+      filePath: req.file.path.replace(/\\/g, '/'),
+      fileName: req.file.originalname,
+      fileSize: `${(req.file.size / (1024 * 1024)).toFixed(2)} MB`
+    });
+  } catch (error) {
+    next(error);
+  }
+};

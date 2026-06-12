@@ -83,11 +83,13 @@ router.patch('/members/:id/reject', adminWriteLimiter, AdminController.rejectMem
 // Read operations
 router.get('/jobs', adminReadLimiter, AdminController.getAllJobs);
 router.get('/jobs/pending', adminReadLimiter, AdminController.pendingJobs);
+router.get('/jobs/applications', adminReadLimiter, AdminController.getJobApplications);
 router.get('/jobs/:id', adminReadLimiter, AdminController.getJobById);
 
 // Write operations
 router.post('/jobs/approve/:id', adminWriteLimiter, AdminController.approveJob);
 router.post('/jobs/reject/:id', adminWriteLimiter, AdminController.rejectJob);
+router.patch('/jobs/applications/:id/status', adminWriteLimiter, AdminController.updateJobApplicationStatus);
 
 // =====================
 // BLOGS ROUTES
