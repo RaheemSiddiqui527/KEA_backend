@@ -9,14 +9,7 @@ import Notification from '../models/notification.models.js';
 import Job from '../models/job.models.js'; // ← ADDED
 import Event from '../models/event.models.js'; // ← ADDED
 import Blog from '../models/blog.models.js'; // ← ADDED
-/*
-import {
-  uploadFileToWasabi,
-  getSignedWasabiUrl,
-  deleteFromWasabi,
-  deleteFilesFromS3
-} from "../utils/wasabi.utils.js";
-*/
+
 import { autoFetchSkills } from '../utils/resume.utils.js';
 import fs from 'fs';
 import path from 'path';
@@ -317,12 +310,7 @@ export const deleteResume = async (req, res, next) => {
       fs.unlinkSync(resume.filePath);
     }
 
-    // Backward compatibility for Wasabi (commented out)
-    /*
-    if (resume.wasabiKey) {
-      await deleteFilesFromS3(resume.wasabiKey);
-    }
-    */
+
 
     await resume.deleteOne();
 

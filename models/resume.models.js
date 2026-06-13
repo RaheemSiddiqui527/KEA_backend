@@ -18,10 +18,7 @@ const resumeSchema = new mongoose.Schema(
       type: String,
     },
 
-    // 🔐 Only store Wasabi key (secure & correct) - Kept for reference or backward compatibility
-    wasabiKey: {
-      type: String,
-    },
+
 
     skills: {
       type: [String],

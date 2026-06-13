@@ -34,7 +34,7 @@ const Resume = mongoose.model('Resume', ResumeSchema);
 
 async function run() {
   try {
-    const uri = process.env.MONGO_URI;
+    const uri = "mongodb://localhost:27017/kea_db";
     await mongoose.connect(uri);
     console.log('Connected!');
 
@@ -52,14 +52,20 @@ async function run() {
       console.log('Found user:', user.name, user.email, user._id);
     }
 
-    // 2. Find a job
-    const job = await Job.findOne({});
+    // 2. Find or create a job
+    let job = await Job.findOne({});
     if (!job) {
-      console.error('No jobs found in the database. Please post a job first.');
-      await mongoose.disconnect();
-      return;
+      job = await Job.create({
+        title: 'Software Engineer',
+        company: 'Acme Corp',
+        location: 'Remote',
+        category: 'IT',
+        status: 'approved'
+      });
+      console.log('Created dummy job:', job._id);
+    } else {
+      console.log('Found job:', job.title, 'at', job.company, job._id);
     }
-    console.log('Found job:', job.title, 'at', job.company, job._id);
 
     // 3. Find or create a resume
     let resume = await Resume.findOne({ user: user._id });

@@ -12,6 +12,7 @@ import Thread from "../models/thread.models.js";
 import Group from "../models/group.models.js";
 import Settings from "../models/settings.model.js";
 import JobApplication from "../models/JobApplication.models.js";
+import Resume from "../models/resume.models.js";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 import fs from "fs";

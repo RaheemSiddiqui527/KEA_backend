@@ -3,7 +3,6 @@ import { auth } from '../middleware/auth.middleware.js';
 import userController from '../controllers/user.controller.js';
 import upload from '../middleware/upload.middleware.js';
 import Resume from '../models/resume.models.js';
-import { getSignedWasabiUrl } from '../utils/wasabi.utils.js';
 
 const router = express.Router();
 
