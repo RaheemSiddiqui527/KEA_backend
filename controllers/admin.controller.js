@@ -391,8 +391,89 @@ const getMemberById = async (req, res, next) => {
 
 const getAllMembers = async (req, res, next) => {
   try {
-    const members = await User.find({ role: "user" });
-    res.json(members);
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const search = req.query.search || "";
+    const status = req.query.status || "all";
+    const category = req.query.category || "all";
+
+    // 1. Build Query
+    const query = { role: "user" };
+
+    if (status !== "all") {
+      if (status === "pending") {
+        query.membershipStatus = "pending";
+      } else if (status === "approved" || status === "active") {
+        query.membershipStatus = "active";
+      } else if (status === "rejected" || status === "inactive") {
+        query.membershipStatus = "inactive";
+      }
+    }
+
+    if (category !== "all") {
+      query["profile.category"] = category;
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      query.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { memberId: searchRegex }
+      ];
+    }
+
+    // 2. Execute queries concurrently
+    const skip = (page - 1) * limit;
+    const skipStats = limit > 100;
+
+    const queryPromise = User.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select("name email role memberId membershipStatus profile createdAt")
+      .lean();
+
+    const countPromise = User.countDocuments(query);
+
+    let members, totalFiltered;
+    let total = 0, pending = 0, approved = 0, rejected = 0;
+
+    if (skipStats) {
+      [members, totalFiltered] = await Promise.all([queryPromise, countPromise]);
+    } else {
+      const statsPromise = Promise.all([
+        User.countDocuments({ role: "user" }),
+        User.countDocuments({ role: "user", membershipStatus: "pending" }),
+        User.countDocuments({ role: "user", membershipStatus: "active" }),
+        User.countDocuments({ role: "user", membershipStatus: "inactive" })
+      ]);
+      const [membersResult, totalFilteredResult, statsResult] = await Promise.all([
+        queryPromise,
+        countPromise,
+        statsPromise
+      ]);
+      members = membersResult;
+      totalFiltered = totalFilteredResult;
+      [total, pending, approved, rejected] = statsResult;
+    }
+
+    // 3. Return response in paginated format
+    res.json({
+      members,
+      pagination: {
+        totalFiltered,
+        page,
+        limit,
+        pages: Math.ceil(totalFiltered / limit)
+      },
+      stats: {
+        total,
+        pending,
+        approved,
+        rejected
+      }
+    });
   } catch (err) {
     next(err);
   }
