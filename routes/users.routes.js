@@ -2,6 +2,7 @@ import express from 'express';
 import { auth } from '../middleware/auth.middleware.js';
 import userController from '../controllers/user.controller.js';
 import upload from '../middleware/upload.middleware.js';
+import avatarUpload from '../middleware/avatarUpload.middleware.js';
 import Resume from '../models/resume.models.js';
 
 const router = express.Router();
@@ -29,6 +30,7 @@ const {
   getMyEventRegistrations,
   connectWithUser,
   getMyConnections,
+  updateAvatar,
 } = userController;
 
 // ================= PUBLIC ROUTES =================
@@ -41,6 +43,7 @@ router.use(auth);
 // User profile
 router.get('/me', getMe);
 router.patch('/me', updateMe);
+router.patch('/me/avatar', avatarUpload.single('avatar'), updateAvatar);
 router.patch('/me/preferences', updatePreferences);
 
 // Dashboard

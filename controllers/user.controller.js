@@ -613,6 +613,36 @@ export const getMyConnections = async (req, res, next) => {
   }
 };
 
+// Update user avatar/profile picture
+export const updateAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Image file is required" });
+    }
+
+    const filePath = req.file.path.replace(/\\/g, '/'); // Store relative path
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const fullUrl = `${protocol}://${host}/${filePath}`;
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { 
+        $set: { 
+          avatar: fullUrl,
+          "profile.avatar": fullUrl
+        } 
+      },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.json(user);
+  } catch (err) {
+    console.error("Avatar upload error:", err);
+    next(err);
+  }
+};
+
 export default {
   getMe,
   updateMe,
@@ -636,5 +666,6 @@ export default {
   registerForEvent,
   getMyEventRegistrations,
   connectWithUser,
-  getMyConnections
+  getMyConnections,
+  updateAvatar
 };
