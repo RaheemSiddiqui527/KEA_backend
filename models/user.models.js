@@ -143,10 +143,38 @@ UserSchema.pre("save", async function () {
     this.password = await bcrypt.hash(this.password, salt);
   }
 
-  // 2️⃣ Admin setup — no memberId, auto approved
-  if (this.isNew && this.role === "admin") {
+  // 2️⃣ Admin setup — auto approved & generate unique KEA-ADM-XXX ID
+  if (this.isNew && this.role === "admin" && !this.memberId) {
     this.membershipStatus = "approved";
-    this.memberId = undefined;
+    
+    let isUnique = false;
+    let nextNumber = 1;
+    let memberId;
+
+    // Find highest existing admin memberId
+    const lastAdmin = await this.constructor.findOne(
+      { memberId: { $regex: /^KEA-ADM-/ }, role: "admin" },
+      { memberId: 1 },
+      { sort: { memberId: -1 } }
+    );
+
+    if (lastAdmin?.memberId) {
+      const lastNum = parseInt(lastAdmin.memberId.replace("KEA-ADM-", ""), 10);
+      if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+    }
+
+    // Loop until we find a unique ID
+    while (!isUnique) {
+      memberId = `KEA-ADM-${String(nextNumber).padStart(3, "0")}`;
+      const existing = await this.constructor.findOne({ memberId });
+      if (!existing) {
+        isUnique = true;
+      } else {
+        nextNumber++;
+      }
+    }
+
+    this.memberId = memberId;
     return; // ✅ Baaki kuch nahi karna admin ke liye
   }
 

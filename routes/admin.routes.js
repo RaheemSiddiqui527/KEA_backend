@@ -215,4 +215,11 @@ router.post('/groups/reject/:id', adminWriteLimiter, AdminController.rejectGroup
 
 // Delete operation
 router.delete('/groups/:id', adminWriteLimiter, AdminController.deleteGroup);
+
+// =====================
+// MANAGE ADMINS ROUTES
+// =====================
+router.get('/admins', adminReadLimiter, AdminController.listAdmins);
+router.post('/admins', adminWriteLimiter, AdminController.createAdmin);
+
 export default router;

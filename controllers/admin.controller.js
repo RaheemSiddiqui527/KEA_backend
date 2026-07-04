@@ -1851,6 +1851,64 @@ const deleteGroup = async (req, res, next) => {
   }
 };
 
+const createAdmin = async (req, res, next) => {
+  try {
+    const { name, email, password, phone } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Name, Email & Password required" });
+    }
+
+    // Check duplicate
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return res.status(400).json({ message: "Email already in use" });
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role: "admin",
+      profile: {
+        phone: phone || "",
+        headline: "Admin",
+        bio: "KEA Platform Administrator"
+      },
+      membershipStatus: "approved"
+    });
+
+    try {
+      await sendRegistrationEmail(email, name);
+      console.log('✅ Admin registration email sent to:', email);
+    } catch (emailError) {
+      console.error('❌ Failed to send registration email:', emailError);
+    }
+
+    res.status(201).json({
+      message: "Admin created successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        membershipStatus: user.membershipStatus
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const listAdmins = async (req, res, next) => {
+  try {
+    const admins = await User.find({ role: "admin" }).select("-password");
+    res.json(admins);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   getMemberById,
   pendingMembers,
@@ -1915,5 +1973,7 @@ export default {
   approveGroup,
   rejectGroup,
   deleteGroup,
-  getAnalyticsData
+  getAnalyticsData,
+  createAdmin,
+  listAdmins
 };
