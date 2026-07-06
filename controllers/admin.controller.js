@@ -1509,7 +1509,15 @@ const updateAdminProfile = async (req, res, next) => {
     const { name, email, phone, avatar } = req.body;
     const admin = await User.findByIdAndUpdate(
       req.user._id,
-      { name, email, phone, avatar },
+      { 
+        $set: { 
+          name, 
+          email, 
+          avatar,
+          "profile.phone": phone,
+          "profile.avatar": avatar
+        } 
+      },
       { new: true, runValidators: true }
     ).select("-password");
     res.json(admin);
@@ -1902,8 +1910,53 @@ const createAdmin = async (req, res, next) => {
 
 const listAdmins = async (req, res, next) => {
   try {
-    const admins = await User.find({ role: "admin" }).select("-password");
+    const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("-password");
     res.json(admins);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteAdmin = async (req, res, next) => {
+  try {
+    // Prevent superadmin from deleting themselves
+    if (req.user._id.toString() === req.params.id) {
+      return res.status(400).json({ message: "You cannot delete your own account" });
+    }
+
+    const admin = await User.findOneAndDelete({ _id: req.params.id, role: "admin" });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin account not found or cannot be deleted" });
+    }
+
+    res.json({ message: "Admin account deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateAdmin = async (req, res, next) => {
+  try {
+    const { name, email, phone, password } = req.body;
+    
+    const admin = await User.findOne({ _id: req.params.id, role: "admin" });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin account not found" });
+    }
+
+    if (name) admin.name = name;
+    if (email) admin.email = email;
+    if (phone !== undefined) {
+      if (!admin.profile) admin.profile = {};
+      admin.profile.phone = phone;
+      admin.markModified('profile');
+    }
+    if (password) {
+      admin.password = password; // The pre-save hook will hash it automatically!
+    }
+
+    await admin.save();
+    res.json(admin);
   } catch (err) {
     next(err);
   }
@@ -1975,5 +2028,7 @@ export default {
   deleteGroup,
   getAnalyticsData,
   createAdmin,
-  listAdmins
+  listAdmins,
+  deleteAdmin,
+  updateAdmin
 };

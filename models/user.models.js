@@ -95,7 +95,7 @@ const UserSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["user", "admin"],
+      enum: ["user", "admin", "superadmin"],
       default: "user",
     },
 
@@ -219,7 +219,7 @@ UserSchema.methods.comparePassword = function (candidatePassword) {
 };
 
 UserSchema.methods.isAdmin = function () {
-  return this.role === "admin";
+  return this.role === "admin" || this.role === "superadmin";
 };
 
 // ✅ toJSON — sensitive fields response mein kabhi nahi aayenge

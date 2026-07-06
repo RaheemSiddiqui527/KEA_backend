@@ -211,8 +211,8 @@ export const adminLogin = async (req, res, next) => {
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
-    // ✅ Role check — only admins get through
-    if (user.role !== "admin")
+    // ✅ Role check — only admins and superadmins get through
+    if (user.role !== "admin" && user.role !== "superadmin")
       return res.status(403).json({ message: "Access denied. Admins only." });
 
     const token = signToken(user);
