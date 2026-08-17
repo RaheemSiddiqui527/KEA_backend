@@ -33,23 +33,35 @@ import upload from "./utils/upload.js";
 
 const app = express();
 
-app.use(
-  cors({
-    origin: [
-      process.env.CORS_ORIGIN,
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://127.0.0.1:3000",
-      "https://kea-user.vercel.app",
-      "https://admin.kokaniengineers.org",
-      "https://kokaniengineers.org",
-      "https://kea-admin.vercel.app",
-      "https://admin.kea.nexcorealliance.com",
-      "https://user.kea.nexcorealliance.com",
-    ],
-    credentials: true,
-  })
-);
+const allowedOrigins = [
+  process.env.CORS_ORIGIN,
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://127.0.0.1:3000",
+  "https://kea-user.vercel.app",
+  "https://admin.kokaniengineers.org",
+  "https://kokaniengineers.org",
+  "https://kea-admin.vercel.app",
+  "https://admin.kea.nexcorealliance.com",
+  "https://user.kea.nexcorealliance.com",
+].filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // =====================
 // BASIC MIDDLEWARE
