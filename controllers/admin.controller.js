@@ -14,7 +14,6 @@ import Settings from "../models/settings.model.js";
 import JobApplication from "../models/JobApplication.models.js";
 import Resume from "../models/resume.models.js";
 import mongoose from "mongoose";
-import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
 import { 
@@ -22,7 +21,8 @@ import {
   sendApprovalEmail, 
   sendRejectionEmail,
   sendContentApprovalEmail,
-  sendContentRejectionEmail 
+  sendContentRejectionEmail,
+  sendTestEmail as sendResendTestEmail
 } from "../utils/emailService.js";
 
 
@@ -1664,33 +1664,21 @@ const restoreBackup = async (req, res, next) => {
 
 const sendTestEmail = async (req, res, next) => {
   try {
-    const { smtpHost, smtpPort, smtpUsername, smtpPassword, smtpFromEmail, adminEmail } = req.body;
+    const { adminEmail, recipientEmail } = req.body;
+    const targetEmail = recipientEmail || adminEmail || process.env.ADMIN_EMAIL;
 
-    if (!smtpHost || !smtpUsername || !smtpPassword) {
-      return res.status(400).json({ message: "Incomplete SMTP configuration" });
+    if (!targetEmail) {
+      return res.status(400).json({ message: "Recipient email address is required" });
     }
 
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: parseInt(smtpPort) || 587,
-      secure: parseInt(smtpPort) === 465,
-      auth: {
-        user: smtpUsername,
-        pass: smtpPassword,
-      },
-    });
+    const result = await sendResendTestEmail(targetEmail);
+    if (!result.success) {
+      return res.status(500).json({ message: "Failed to send test email: " + (result.error?.message || result.error) });
+    }
 
-    await transporter.sendMail({
-      from: smtpFromEmail || smtpUsername,
-      to: adminEmail || smtpUsername,
-      subject: "KEA Admin: SMTP Test Email",
-      text: "This is a test email from the KEA Admin Panel settings. Your SMTP configuration is working correctly!",
-      html: "<h3>KEA Admin Panel</h3><p>Your SMTP configuration is working correctly!</p>"
-    });
-
-    res.json({ message: "Test email sent successfully!" });
+    res.json({ message: "Test email sent successfully via Resend!" });
   } catch (err) {
-    console.error("SMTP Test Error:", err);
+    console.error("Resend Test Error:", err);
     res.status(500).json({ message: "Failed to send test email: " + err.message });
   }
 };

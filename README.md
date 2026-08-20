@@ -8,7 +8,7 @@ This repository houses the core RESTful API server for the **Kokani Engineers & 
 * **Database**: MongoDB (via Mongoose ODM)
 * **Authentication**: JSON Web Token (JWT) & bcryptjs hashing
 * **File Uploads**: Multer local disk storage validation
-* **Email dispatch**: Nodemailer SMTP Integration
+* **Email dispatch**: Resend API Integration
 
 ---
 
