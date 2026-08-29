@@ -14,28 +14,15 @@ const resourceSchema = new mongoose.Schema(
     },
 
     category: {
-  type: String,
-  required: true,
-  enum: [
-    // Existing
-    'Career guidance',
-    'Technical papers',
-    'Project reports',
-    'Workshop & webinars',
-    'Templates & checklists',
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-    // Engineering disciplines (NEW)
-    'Civil',
-    'Mechanical',
-    'Electrical',
-    'Computer Science',
-    'Electronics',
-    'Chemical',
-    'IT',
-    'AI/ML',
-    'Data Science',
-  ],
-},
+    subcategory: {
+      type: String,
+      trim: true,
+    },
 
     format: {
       type: String,

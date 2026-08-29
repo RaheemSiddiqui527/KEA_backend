@@ -507,6 +507,62 @@ export const sendTestEmail = async (recipientEmail) => {
   return sendEmail({ to: recipientEmail, subject, html });
 };
 
+// =======================================
+// 7. NEWSLETTER EMAILS (RESEND API)
+// =======================================
+
+export const sendWelcomeNewsletterEmail = async (userEmail) => {
+  const subject = '🎉 Welcome to KEA Newsletter & Updates';
+  const unsubscribeUrl = `${process.env.BACKEND_URL || 'http://localhost:7101'}/api/newsletter/unsubscribe?email=${encodeURIComponent(userEmail)}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+      <div style="background: linear-gradient(135deg, #0D2847 0%, #1a3a5c 100%); padding: 30px; text-align: center;">
+        <h1 style="color: #f59e0b; margin: 0; font-size: 24px;">Welcome to KEA Newsletter!</h1>
+        <p style="color: #ffffff; margin: 8px 0 0 0; font-size: 14px;">Kokani Engineers & Professionals Association</p>
+      </div>
+      <div style="padding: 30px; background: #f9fafb;">
+        <p>Hello,</p>
+        <p>Thank you for subscribing to the <strong>Kokani Engineers & Professionals Association (KEA)</strong> newsletter!</p>
+        <div style="background: #ffffff; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <p style="margin: 0; color: #0D2847; font-weight: bold;">📬 What you will receive:</p>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px; color: #475569;">
+            <li>Latest engineering & technical news from Kokan and global chapters</li>
+            <li>Upcoming webinars, workshops & community conferences</li>
+            <li>Exclusive career openings and mentorship opportunities</li>
+          </ul>
+        </div>
+        <p>Stay connected and feel free to reach us at <a href="mailto:support@kokaniengineers.org" style="color: #0D2847; font-weight: bold;">support@kokaniengineers.org</a>.</p>
+        <p style="margin-top: 30px; border-top: 1px solid #e5e7eb; padding-top: 20px; text-align: center; font-size: 12px; color: #94a3b8;">
+          You received this email because you subscribed to KEA updates.<br/>
+          <a href="${unsubscribeUrl}" style="color: #64748b; text-decoration: underline;">Unsubscribe from newsletters</a>
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({ to: userEmail, subject, html });
+};
+
+export const sendBroadcastNewsletterEmail = async (userEmail, campaignSubject, campaignHtmlContent) => {
+  const unsubscribeUrl = `${process.env.BACKEND_URL || 'http://localhost:7101'}/api/newsletter/unsubscribe?email=${encodeURIComponent(userEmail)}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+      <div style="background: #0D2847; padding: 20px 30px; text-align: center;">
+        <h2 style="color: #ffffff; margin: 0; font-size: 20px;">Kokani Engineers & Professionals Association (KEA)</h2>
+      </div>
+      <div style="padding: 30px; background: #ffffff;">
+        ${campaignHtmlContent}
+        <div style="margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 20px; text-align: center; font-size: 12px; color: #94a3b8;">
+          © ${new Date().getFullYear()} Kokani Engineers & Professionals Association (KEA). All rights reserved.<br/>
+          <a href="${unsubscribeUrl}" style="color: #64748b; text-decoration: underline; margin-top: 6px; display: inline-block;">Unsubscribe from newsletter updates</a>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({ to: userEmail, subject: campaignSubject, html });
+};
+
 export default {
   sendRegistrationEmail,
   sendApprovalEmail,
@@ -520,4 +576,6 @@ export default {
   sendContentRejectionEmail,
   sendAdminNotificationEmail,
   sendTestEmail,
+  sendWelcomeNewsletterEmail,
+  sendBroadcastNewsletterEmail,
 };

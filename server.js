@@ -29,14 +29,17 @@ import SeminarRoutes from "./routes/seminar.routes.js";
 import galleryRoutes from "./routes/gallery.routes.js";
 import userSettingsRoutes from "./routes/userSettings.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
+import newsletterRoutes from "./routes/newsletter.routes.js";
+import resourceCategoryRoutes from "./routes/resourceCategory.routes.js";
+import disciplineRoutes from "./routes/discipline.routes.js";
 import upload from "./utils/upload.js";
-
 const app = express();
 
 const allowedOrigins = [
   process.env.CORS_ORIGIN,
   "http://localhost:3000",
   "http://localhost:3001",
+  "http://localhost:3002",
   "http://127.0.0.1:3000",
   "https://kea-user.vercel.app",
   "https://admin.kokaniengineers.org",
@@ -255,8 +258,43 @@ app.use("/api/resources", resourceRoutes);
 app.use("/api/gallery", userActionLimiter, galleryRoutes);
 app.use("/api/tools", toolRoutes);
 app.use("/api/seminars", SeminarRoutes);
-app.use("/api/settings/user", userActionLimiter, userSettingsRoutes);
 app.use("/api/feedback", userActionLimiter, feedbackRoutes);
+app.use("/api/newsletter", newsletterRoutes);
+app.use("/api/resource-categories", resourceCategoryRoutes);
+app.use("/api/disciplines", disciplineRoutes);
+
+// Public CMS settings route
+app.get("/api/settings/cms", async (req, res) => {
+  try {
+    const Settings = (await import('./models/settings.model.js')).default;
+    let settings = await Settings.findOne();
+    if (!settings) {
+      settings = await Settings.create({});
+    }
+    res.json(settings?.publicCMS || {});
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching CMS settings", error: err.message });
+  }
+});
+
+// Public Website Full Settings & Dynamic Navigation route
+app.get("/api/settings/public", async (req, res) => {
+  try {
+    const Settings = (await import('./models/settings.model.js')).default;
+    let settings = await Settings.findOne();
+    if (!settings) {
+      settings = await Settings.create({});
+    }
+    res.json({
+      navigationItems: settings.navigationItems || [],
+      headerConfig: settings.headerConfig || {},
+      footerConfig: settings.footerConfig || {},
+      publicCMS: settings.publicCMS || {}
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching public website settings", error: err.message });
+  }
+});
 
 // =====================
 // HEALTH CHECK

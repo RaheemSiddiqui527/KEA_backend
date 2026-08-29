@@ -4,6 +4,7 @@ import AdminController, { adminGetAllResources, adminGetStats, approveResource, 
 import { auth } from '../middleware/auth.middleware.js';
 import { requireRole } from '../middleware/role.middleware.js';
 import { deleteResource, getResourceById } from '../controllers/resource.controller.js';
+import { sendBulkEmail, getEmailLogs } from '../controllers/communications.controller.js';
 
 const router = express.Router();
 
@@ -203,6 +204,12 @@ router.patch('/settings', adminSensitiveLimiter, AdminController.updateSettings)
 router.get('/backup', adminCriticalLimiter, AdminController.createBackup);
 router.post('/restore', adminCriticalLimiter, AdminController.restoreBackup);
 router.post('/test-email', adminSensitiveLimiter, AdminController.sendTestEmail);
+
+// =====================
+// COMMUNICATIONS ROUTES
+// =====================
+router.post('/communications/send', adminSensitiveLimiter, sendBulkEmail);
+router.get('/communications/logs', adminReadLimiter, getEmailLogs);
 
 // Read operations
 router.get('/groups', adminReadLimiter, AdminController.getAllGroups);

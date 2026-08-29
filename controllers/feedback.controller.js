@@ -1,6 +1,45 @@
 import Feedback from '../models/feedback.models.js';
 import { createAdminNotification } from '../utils/createNotification.js';
 
+// Submit public contact form inquiry
+export const submitPublicContact = async (req, res) => {
+  try {
+    const { name, email, phone, category, message } = req.body;
+
+    if (!name || !email || !message) {
+      return res.status(400).json({ message: 'Name, email, and message are required' });
+    }
+
+    const feedback = await Feedback.create({
+      contactName: name,
+      contactEmail: email,
+      contactPhone: phone || '',
+      category: category || 'General Inquiry',
+      subject: `[Public Inquiry] ${category || 'Contact Form'} from ${name}`,
+      message: message,
+      status: 'pending',
+    });
+
+    // Notify admins
+    await createAdminNotification({
+      type: 'feedback',
+      title: 'New Public Contact Inquiry Received',
+      message: `${name} (${email}): ${category || 'Inquiry'}`,
+      relatedId: feedback._id,
+      relatedModel: 'Feedback'
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Inquiry submitted successfully',
+      feedback
+    });
+  } catch (err) {
+    console.error('❌ Error in submitPublicContact:', err);
+    res.status(500).json({ message: 'Error submitting inquiry', error: err.message });
+  }
+};
+
 // Submit feedback
 export const submitFeedback = async (req, res) => {
   try {

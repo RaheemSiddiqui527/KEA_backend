@@ -4,11 +4,13 @@ const feedbackSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
   },
+  contactName: String,
+  contactEmail: String,
+  contactPhone: String,
   category: {
     type: String,
-    enum: ['Bug Report', 'Feature Request', 'General Feedback', 'Complaint', 'Suggestion', 'Other'],
     required: true
   },
   subject: {

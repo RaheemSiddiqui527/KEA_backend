@@ -1,6 +1,7 @@
 import express from 'express';
 import { auth } from '../middleware/auth.middleware.js';
 import {
+  submitPublicContact,
   submitFeedback,
   getUserFeedback,
   getFeedback,
@@ -10,7 +11,10 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication
+// Public route for contact form
+router.post('/contact', submitPublicContact);
+
+// Authenticated routes
 router.post('/', auth, submitFeedback);
 router.get('/', auth, getUserFeedback);
 router.get('/stats', auth, getFeedbackStats);
