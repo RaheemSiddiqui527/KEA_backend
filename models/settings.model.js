@@ -72,6 +72,12 @@ const settingsSchema = new mongoose.Schema({
     contactEmail: { type: String, default: "support@kokaniengineers.org" },
     contactPhone: { type: String, default: "" },
     officeLocation: { type: String, default: "Mumbai & Konkan Region, Maharashtra, India" },
+    contactTitle: { type: String, default: "Contact Us" },
+    contactDescription: { type: String, default: "Get in touch with the Kokani Engineers & Professionals Association." },
+    careerTitle: { type: String, default: "Career Portal" },
+    careerDescription: { type: String, default: "Find jobs and career opportunities within our network." },
+    resourcesTitle: { type: String, default: "Resources" },
+    resourcesDescription: { type: String, default: "Access important resources and materials." },
     disclaimerText: { type: String, default: "The information on this website is provided for general educational and professional networking guidance purposes only. Kokani Engineers & Professionals Association (KEA) does not guarantee specific placement outcomes or third-party service deliverables." }
   },
 
