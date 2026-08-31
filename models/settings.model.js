@@ -66,7 +66,7 @@ const settingsSchema = new mongoose.Schema({
     heroSubtitle: { type: String, default: "Kokani Engineers & Professionals Association" },
     heroDescription: { type: String, default: "Everything you need to advance your engineering, professionals & technical career and connect with your community." },
     aboutTitle: { type: String, default: "About KEA & Our Services" },
-    aboutDescription: { type: String, default: "Kokani Engineers & Professionals Association is a non-profit global organization dedicated to bringing together engineers, tech leaders, and professionals belonging to the Kokan region." },
+    aboutDescription: { type: String, default: "Kokani Engineers & Professionals Association is bringing together engineers, tech leaders, and professionals." },
     missionText: { type: String, default: "The Kokani Engineers & Professionals Association (KEA) is dedicated to uniting engineers from our community on a single global platform. Our mission is to foster professional growth, facilitate meaningful connections, and provide resources that empower every member to achieve excellence in their field." },
     visionText: { type: String, default: "To be the pre-eminent global network of the Kokani Engineers & Professionals Association (KEA), recognized for driving innovation, professional excellence, and community impact, while creating a legacy of technical leadership for generations to come." },
     contactEmail: { type: String, default: "support@kokaniengineers.org" },
