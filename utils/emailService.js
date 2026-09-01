@@ -129,7 +129,7 @@ export const sendRegistrationEmail = async (userEmail, userName) => {
           
           <p>If you have any questions, please reach out to us at <a href="mailto:support@kokaniengineers.org" style="color: #0D2847; font-weight: bold;">support@kokaniengineers.org</a>.</p>
           
-          <p>Best regards,<br><strong>KEA Administrative Team</strong><br>Kokani Engineers & Professionals Association</p>
+          <p>Best regards,<br><strong>KEA Team</strong></p>
         </div>
         <div class="footer">
           <p>© ${new Date().getFullYear()} Kokani Engineers & Professionals Association (KEA). All rights reserved.</p>
@@ -171,7 +171,7 @@ export const sendApprovalEmail = async (userEmail, userName) => {
         <div class="content">
           <div class="success-box">
             <h2 style="margin-top: 0; color: #065f46;">✅ Your KEA Membership is APPROVED!</h2>
-            <p style="margin-bottom: 0; color: #047857;">Your application has been reviewed and approved by the Kokani Engineers & Professionals Association committee.</p>
+            <p style="margin-bottom: 0; color: #047857;">Your application has been reviewed and approved by the KEA Team.</p>
           </div>
           
           <p>Dear <strong>${userName}</strong>,</p>
@@ -187,7 +187,7 @@ export const sendApprovalEmail = async (userEmail, userName) => {
           </ul>
           
           <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_URL || 'https://user.kea.nexcorealliance.com'}/login" class="btn">
+            <a href="${process.env.FRONTEND_URL || 'https://kokaniengineers.org'}/login" class="btn">
               🚀 Log In to Your Account
             </a>
           </div>
@@ -196,7 +196,7 @@ export const sendApprovalEmail = async (userEmail, userName) => {
           
           <p>Thank you for joining KEA. We look forward to your active contribution and networking within the community!</p>
           
-          <p>Best regards,<br><strong>KEA Administrative Team</strong><br>Kokani Engineers & Professionals Association</p>
+          <p>Best regards,<br><strong>KEA Team</strong></p>
         </div>
         <div class="footer">
           <p>© ${new Date().getFullYear()} Kokani Engineers & Professionals Association (KEA). All rights reserved.</p>
@@ -252,7 +252,7 @@ export const sendRejectionEmail = async (userEmail, userName, reason = '') => {
             <li>Contact our support team at <a href="mailto:support@kokaniengineers.org">support@kokaniengineers.org</a> for clarification</li>
           </ul>
           
-          <p>Best regards,<br><strong>KEA Administrative Team</strong><br>Kokani Engineers & Professionals Association</p>
+          <p>Best regards,<br><strong>KEA Team</strong></p>
         </div>
         <div class="footer">
           <p>© ${new Date().getFullYear()} Kokani Engineers & Professionals Association (KEA). All rights reserved.</p>
@@ -303,7 +303,7 @@ export const sendPasswordResetEmail = async (userEmail, userName, resetUrl) => {
           
           <p style="font-size: 13px; color: #6b7280;">If you did not request this password reset, please ignore this email or contact support if you suspect unauthorized activity.</p>
           
-          <p>Best regards,<br><strong>KEA Security Team</strong><br>Kokani Engineers & Professionals Association</p>
+          <p>Best regards,<br><strong>KEA Team</strong></p>
         </div>
         <div class="footer">
           <p>© ${new Date().getFullYear()} Kokani Engineers & Professionals Association (KEA). All rights reserved.</p>
@@ -336,7 +336,7 @@ export const sendEventRegistrationEmail = async (userEmail, userName, eventTitle
           <p style="margin: 5px 0 0 0; font-size: 14px; color: #666;">The event coordinator will review your request shortly.</p>
         </div>
         <p>You will receive a confirmation email once your seat is confirmed.</p>
-        <p>Best regards,<br/><strong>KEA Events Team</strong><br/>Kokani Engineers & Professionals Association</p>
+        <p>Best regards,<br/><strong>KEA Team</strong></p>
       </div>
     </div>
   `;
@@ -358,7 +358,7 @@ export const sendEventApprovalEmail = async (userEmail, userName, eventTitle) =>
           <p style="margin: 0; color: #065f46;">You are now officially registered for this event.</p>
         </div>
         <p>We look forward to seeing you there!</p>
-        <p>Best regards,<br/><strong>KEA Events Team</strong><br/>Kokani Engineers & Professionals Association</p>
+        <p>Best regards,<br/><strong>KEA Team</strong></p>
       </div>
     </div>
   `;
@@ -384,7 +384,7 @@ export const sendGroupJoinRequestEmail = async (userEmail, userName, groupName) 
           <p style="margin: 0;"><strong>Status:</strong> Awaiting Group Admin Approval</p>
         </div>
         <p>We will notify you once the group administrator reviews your request.</p>
-        <p>Best regards,<br/><strong>KEA Community Team</strong><br/>Kokani Engineers & Professionals Association</p>
+        <p>Best regards,<br/><strong>KEA Team</strong></p>
       </div>
     </div>
   `;
@@ -406,7 +406,7 @@ export const sendGroupApprovalEmail = async (userEmail, userName, groupName) => 
           <p style="margin: 0;">You can now participate in discussions, access shared materials, and collaborate with group members.</p>
         </div>
         <p>Happy networking!</p>
-        <p>Best regards,<br/><strong>KEA Community Team</strong><br/>Kokani Engineers & Professionals Association</p>
+        <p>Best regards,<br/><strong>KEA Team</strong></p>
       </div>
     </div>
   `;
@@ -432,7 +432,7 @@ export const sendContentApprovalEmail = async (userEmail, userName, contentType,
           <p style="margin: 0; color: #065f46;">It is now live on the KEA platform for all members to view.</p>
         </div>
         <p>Thank you for contributing to the KEA community!</p>
-        <p>Best regards,<br/><strong>KEA Editorial Team</strong><br/>Kokani Engineers & Professionals Association</p>
+        <p>Best regards,<br/><strong>KEA Team</strong></p>
       </div>
     </div>
   `;
@@ -455,7 +455,7 @@ export const sendContentRejectionEmail = async (userEmail, userName, contentType
           ${reason ? `<p style="margin: 10px 0 0 0; color: #7f1d1d;"><strong>Reason:</strong> ${reason}</p>` : ''}
         </div>
         <p>If you have any questions or would like to submit revisions, please reach out to <a href="mailto:support@kokaniengineers.org">support@kokaniengineers.org</a>.</p>
-        <p>Best regards,<br/><strong>KEA Editorial Team</strong><br/>Kokani Engineers & Professionals Association</p>
+        <p>Best regards,<br/><strong>KEA Team</strong></p>
       </div>
     </div>
   `;
@@ -478,7 +478,7 @@ export const sendAdminNotificationEmail = async (adminEmail, subject, title, mes
         <h2 style="color: #0D2847; margin-top: 0; font-size: 18px;">${title}</h2>
         <p style="font-size: 15px; line-height: 1.5; color: #475569;">${message}</p>
         <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
-          <a href="${process.env.ADMIN_URL || 'https://admin.kea.nexcorealliance.com'}/admin/login" 
+          <a href="${process.env.ADMIN_URL || 'https://admin.kokaniengineers.org'}/admin/login" 
              style="display: inline-block; background: #0D2847; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500;">
             Open Admin Dashboard
           </a>
