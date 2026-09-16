@@ -66,7 +66,7 @@ const settingsSchema = new mongoose.Schema({
     heroSubtitle: { type: String, default: "Kokani Engineers & Professionals Association" },
     heroDescription: { type: String, default: "Everything you need to advance your engineering, professionals & technical career and connect with your community." },
     aboutTitle: { type: String, default: "About KEA & Our Services" },
-    aboutDescription: { type: String, default: "Kokani Engineers & Professionals Association is bringing together engineers, tech leaders, and professionals." },
+    aboutDescription: { type: String, default: "Building on a decade of organic networking, now transforming into a structured, unified platform. Our mission is to connect Kokani engineers, architects, professionals, and technical experts across India and globally, elevating our community to the next level." },
     missionText: { type: String, default: "The Kokani Engineers & Professionals Association (KEA) is dedicated to uniting engineers from our community on a single global platform. Our mission is to foster professional growth, facilitate meaningful connections, and provide resources that empower every member to achieve excellence in their field." },
     visionText: { type: String, default: "To be the pre-eminent global network of the Kokani Engineers & Professionals Association (KEA), recognized for driving innovation, professional excellence, and community impact, while creating a legacy of technical leadership for generations to come." },
     contactEmail: { type: String, default: "support@kokaniengineers.org" },
@@ -75,15 +75,15 @@ const settingsSchema = new mongoose.Schema({
     contactTitle: { type: String, default: "Contact Us" },
     contactDescription: { type: String, default: "Get in touch with the Kokani Engineers & Professionals Association." },
     careerTitle: { type: String, default: "Career Portal" },
-    careerDescription: { type: String, default: "Find jobs and career opportunities within our network." },
-    resourcesTitle: { type: String, default: "Resources" },
-    resourcesDescription: { type: String, default: "Access important resources and materials." },
+    careerDescription: { type: String, default: "Find quality engineering and professional jobs, internships, and career growth opportunities within our network." },
+    resourcesTitle: { type: String, default: "Resources & Tools" },
+    resourcesDescription: { type: String, default: "Through this platform, professionals can access relevant resources, tools, and knowledge to support their engineering and professional journey." },
     disclaimerText: { type: String, default: "The information on this website is provided for general educational and professional networking guidance purposes only. Kokani Engineers & Professionals Association (KEA) does not guarantee specific placement outcomes or third-party service deliverables." }
   },
 
   // FOOTER CONFIG
   footerConfig: {
-    aboutText: { type: String, default: "Empowering Kokani engineers, architects, IT leaders, and technical professionals worldwide." },
+    aboutText: { type: String, default: "Empowering Kokani engineers, architects, professionals, and technical experts worldwide." },
     copyrightText: { type: String, default: "Kokani Engineers & Professionals Association (KEA). All rights reserved." },
     contactEmail: { type: String, default: "support@kokaniengineers.org" },
     officeLocation: { type: String, default: "Mumbai & Konkan Region, Maharashtra, India" }
