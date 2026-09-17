@@ -38,10 +38,10 @@ const settingsSchema = new mongoose.Schema({
     default: [
       { id: "nav-home", name: "Home", href: "/", enabled: true, order: 1 },
       { id: "nav-about", name: "About", href: "/about", enabled: true, order: 2 },
-      { id: "nav-career", name: "Career Portal", href: "/career-portal", enabled: true, order: 3 },
-      { id: "nav-resources", name: "Resources", href: "/resources", enabled: true, order: 4 },
-      { id: "nav-events", name: "Events", href: "/events", enabled: true, order: 5 },
-      { id: "nav-contact", name: "Contact", href: "/contact", enabled: true, order: 6 },
+      { id: "nav-career", name: "Career Portal", href: "/#career", enabled: true, order: 3 },
+      { id: "nav-resources", name: "Resources", href: "/#resources", enabled: true, order: 4 },
+      { id: "nav-events", name: "Events", href: "/#events", enabled: true, order: 5 },
+      { id: "nav-contact", name: "Contact", href: "/#contact", enabled: true, order: 6 },
       { id: "nav-signin", name: "Sign In", href: "/login", isButton: true, buttonVariant: "secondary", enabled: true, order: 7 },
       { id: "nav-join", name: "Join KEA", href: "/register", isButton: true, buttonVariant: "primary", enabled: true, order: 8 }
     ]
