@@ -15,15 +15,15 @@ import {
 
 const router = express.Router();
 
-// ================= PUBLIC =================
-router.get('/categories/stats', getCategoryStats);
-router.get('/', getAllResources);
+// ================= MEMBERS ONLY =================
+router.get('/categories/stats', auth, getCategoryStats);
+router.get('/', auth, getAllResources);
 
 // ================= VIEW (MUST BE BEFORE :id) =================
 router.get('/:id/view',  viewResource);
 
 // ================= CRUD =================
-router.get('/:id', getResourceById);
+router.get('/:id', auth, getResourceById);
 router.post('/', auth, createResource); // external links only
 router.post('/upload', auth, upload.single('file'), uploadResource); // 🔥 Wasabi
 router.put('/:id', auth, updateResource);
