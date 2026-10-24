@@ -1,50 +1,99 @@
 import Resource from '../models/resource.models.js';
-// import { uploadFileToS3, getSignedS3Url, deleteFilesFromS3, getFileBuffer } from '../utils/wasabi.utils.js';
+import ResourceCategory from '../models/resourceCategory.models.js';
 import path from 'path';
 import fs from 'fs';
 
+// Helper to determine format & icon from file extension
+const getFormatAndIcon = (fileName) => {
+  const ext = path.extname(fileName).toLowerCase();
+
+  let format = 'File';
+  let icon = 'FileText';
+
+  if (ext === '.pdf') {
+    format = 'PDF';
+    icon = 'FileText';
+  } else if (['.doc', '.docx'].includes(ext)) {
+    format = 'DOCX';
+    icon = 'FileText';
+  } else if (['.ppt', '.pptx'].includes(ext)) {
+    format = 'File';
+    icon = 'FileText';
+  } else if (['.xls', '.xlsx'].includes(ext)) {
+    format = 'File';
+    icon = 'FileText';
+  } else if (['.mp4', '.avi', '.mov'].includes(ext)) {
+    format = 'Video';
+    icon = 'Video';
+  } else if (['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext)) {
+    format = 'Images';
+    icon = 'Image';
+  }
+
+  return { format, icon };
+};
+
 /**
- * Get all resources
+ * Get all resources (User and General query)
  */
 export const getAllResources = async (req, res) => {
   try {
     const {
       category,
+      subcategory,
       search,
+      status,
+      format,
       page = 1,
-      limit = 9,
+      limit = 12,
       sortBy = 'createdAt',
-      order = 'desc'
+      order = 'desc',
     } = req.query;
 
     const query = {};
 
-    if (category && category !== 'All resources') {
+    // For non-admin or public users, only return approved resources
+    if (req.user?.role === 'admin' && status && status !== 'all') {
+      query.status = status;
+    } else if (req.user?.role !== 'admin') {
+      query.status = 'approved';
+    }
+
+    if (category && category !== 'All resources' && category !== 'all') {
       query.category = category;
     }
 
-    if (search) {
+    if (subcategory && subcategory !== 'all') {
+      query.subcategory = subcategory;
+    }
+
+    if (format && format !== 'All Formats' && format !== 'all') {
+      query.format = format;
+    }
+
+    if (search && search.trim()) {
+      const s = search.trim();
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } },
-        { author: { $regex: search, $options: 'i' } }
+        { title: { $regex: s, $options: 'i' } },
+        { description: { $regex: s, $options: 'i' } },
+        { tags: { $in: [new RegExp(s, 'i')] } },
+        { author: { $regex: s, $options: 'i' } },
+        { originalFileName: { $regex: s, $options: 'i' } },
       ];
     }
 
-    const skip = (page - 1) * limit;
-    const sortOrder = order === 'desc' ? -1 : 1;
+    const skip = (Number(page) - 1) * Number(limit);
+    const sortOrder = order === 'asc' ? 1 : -1;
 
-    const resources = await Resource.find({
-      ...query,
-      status: { $ne: "pending" }
-    })
-      .sort({ [sortBy]: sortOrder })
-      .skip(skip)
-      .limit(Number(limit));
-
-
-    const total = await Resource.countDocuments(query);
+    const [resources, total] = await Promise.all([
+      Resource.find(query)
+        .populate('submittedBy', 'name email role')
+        .populate('folder', 'name subcategories')
+        .sort({ [sortBy]: sortOrder })
+        .skip(skip)
+        .limit(Number(limit)),
+      Resource.countDocuments(query),
+    ]);
 
     res.json({
       success: true,
@@ -53,14 +102,15 @@ export const getAllResources = async (req, res) => {
         total,
         page: Number(page),
         limit: Number(limit),
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / Number(limit)) || 1,
+      },
     });
   } catch (error) {
+    console.error('getAllResources error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch resources',
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -70,12 +120,14 @@ export const getAllResources = async (req, res) => {
  */
 export const getResourceById = async (req, res) => {
   try {
-    const resource = await Resource.findById(req.params.id);
+    const resource = await Resource.findById(req.params.id)
+      .populate('submittedBy', 'name email role')
+      .populate('folder', 'name subcategories');
 
     if (!resource) {
       return res.status(404).json({
         success: false,
-        error: 'Resource not found'
+        error: 'Resource not found',
       });
     }
 
@@ -84,111 +136,153 @@ export const getResourceById = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch resource',
-      message: error.message
+      message: error.message,
     });
   }
 };
 
 /**
- * Create resource (link)
+ * Create resource (link / video)
  */
 export const createResource = async (req, res) => {
   try {
     const {
       title,
       category,
+      subcategory,
       format,
       tags,
       externalLink,
       description,
       author,
+      status: requestedStatus,
     } = req.body;
 
     if (!title || !category || !format || !externalLink) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ success: false, error: 'Missing required fields (title, category, format, link)' });
     }
 
     if (format !== 'Link' && format !== 'Video') {
-      return res.status(400).json({ error: 'Use upload API for file resources' });
+      return res.status(400).json({ success: false, error: 'Use upload API for file resources' });
     }
 
+    const isAdmin = req.user?.role === 'admin';
+    const status = isAdmin ? (requestedStatus || 'approved') : 'pending';
+
+    // Find folder if exists
+    const folderDoc = await ResourceCategory.findOne({ name: category });
+
     const resource = await Resource.create({
-      title,
+      title: title.trim(),
       subtitle: `${category} • ${format}`,
-      category,
+      category: category.trim(),
+      subcategory: subcategory ? subcategory.trim() : '',
+      folder: folderDoc?._id || undefined,
       format,
-      tags: Array.isArray(tags) ? tags : [],
-      externalLink,
-      description,
-      author: author || 'Anonymous',
+      tags: Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []),
+      externalLink: externalLink.trim(),
+      description: description ? description.trim() : '',
+      author: author ? author.trim() : (isAdmin ? 'Admin' : 'Anonymous'),
       icon: format === 'Video' ? 'Video' : 'Link2',
+      status,
+      submittedBy: req.user?._id,
     });
 
-    res.status(201).json({ success: true, resource });
+    res.status(201).json({ success: true, resource, message: 'Resource created successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('createResource error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 };
 
 /**
- * Upload resource
+ * Upload resource(s) - Supports single or multiple files
  */
 export const uploadResource = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const files = req.files && req.files.length > 0 ? req.files : (req.file ? [req.file] : []);
+
+    if (files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No file(s) uploaded' });
     }
 
-    const { title, category, tags, description, author } = req.body;
+    const {
+      title,
+      category,
+      subcategory,
+      tags,
+      description,
+      author,
+      status: requestedStatus,
+    } = req.body;
 
-    if (!title || !category) {
+    if (!category || !category.trim()) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields',
+        error: 'Destination folder / category is required',
       });
     }
 
-    const ext = path.extname(req.file.originalname).toLowerCase();
+    const isAdmin = req.user?.role === 'admin';
+    const status = isAdmin ? (requestedStatus || 'approved') : 'pending';
 
-    let format = 'File';
-    if (ext === '.pdf') format = 'PDF';
-    else if (['.doc', '.docx'].includes(ext)) format = 'DOCX';
-    else if (['.mp4', '.avi', '.mov'].includes(ext)) format = 'Video';
-    else if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) format = 'Images';
+    // Find folder if exists or create if missing
+    let folderDoc = await ResourceCategory.findOne({ name: category.trim() });
+    if (!folderDoc && isAdmin) {
+      folderDoc = await ResourceCategory.create({
+        name: category.trim(),
+        subcategories: subcategory ? [subcategory.trim()] : [],
+      });
+    } else if (folderDoc && subcategory && !folderDoc.subcategories.includes(subcategory.trim())) {
+      folderDoc.subcategories.push(subcategory.trim());
+      await folderDoc.save();
+    }
 
-    const icon =
-      format === 'Video'
-        ? 'Video'
-        : format === 'Images'
-          ? 'Image'
-          : 'FileText';
+    const parsedTags = Array.isArray(tags)
+      ? tags
+      : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
 
-    // WASABI LOGIC COMMENTED OUT
-    /*
-    const { wasabiKey } = await uploadFileToS3(req.file, 'resources');
-    */
+    const createdResources = [];
 
-    const resource = await Resource.create({
-      title,
-      subtitle: `${category} • ${format}`,
-      category,
-      format,
-      tags: tags ? tags.split(',').map(t => t.trim()) : [],
-      // wasabiKey,
-      filePath: req.file.path.replace(/\\/g, '/'), // Save local path
-      mimeType: req.file.mimetype,
-      fileSize: req.file.size,
-      description,
-      author: author || 'Anonymous',
-      icon,
-    });
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const { format, icon } = getFormatAndIcon(f.originalname);
+
+      // If user supplied a title and there's 1 file, use title; otherwise default to clean file name
+      let docTitle = title && files.length === 1
+        ? title.trim()
+        : path.parse(f.originalname).name.replace(/[-_]/g, ' ');
+
+      const resource = await Resource.create({
+        title: docTitle,
+        subtitle: `${category.trim()} • ${format}`,
+        category: category.trim(),
+        subcategory: subcategory ? subcategory.trim() : '',
+        folder: folderDoc?._id || undefined,
+        format,
+        tags: parsedTags,
+        filePath: f.path.replace(/\\/g, '/'),
+        originalFileName: f.originalname,
+        mimeType: f.mimetype,
+        fileSize: f.size,
+        description: description ? description.trim() : '',
+        author: author ? author.trim() : (isAdmin ? 'Admin' : 'Anonymous'),
+        icon,
+        status,
+        submittedBy: req.user?._id,
+      });
+
+      createdResources.push(resource);
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Resource uploaded successfully to local storage',
-      resource,
+      message: `${createdResources.length} document(s) uploaded successfully`,
+      resource: createdResources[0],
+      resources: createdResources,
     });
   } catch (error) {
+    console.error('uploadResource error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to upload resource',
@@ -198,7 +292,7 @@ export const uploadResource = async (req, res) => {
 };
 
 /**
- * View resource
+ * View resource (Streams file inline for browser or returns JSON if requested)
  */
 export const viewResource = async (req, res) => {
   try {
@@ -211,63 +305,53 @@ export const viewResource = async (req, res) => {
       });
     }
 
-    // 🔗 External links (Link / Video)
+    // External link
     if (!resource.filePath && !resource.wasabiKey) {
-      return res.json({
-        success: true,
-        externalLink: resource.externalLink || null,
-        type: 'external',
-      });
+      if (resource.externalLink) {
+        return res.redirect(resource.externalLink);
+      }
+      return res.status(400).json({ success: false, error: 'No link or file found for this resource' });
     }
 
     // Local file handling
     if (resource.filePath) {
-      const protocol = req.protocol;
-      const host = req.get('host');
-      const url = `${protocol}://${host}/${resource.filePath}`;
-      
-      return res.json({
-        success: true,
-        url,
-        type: 'local',
-        format: resource.format,
-        mimeType: resource.mimeType,
-      });
+      const fullPath = path.resolve(resource.filePath);
+
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({ success: false, error: 'File not found on storage server' });
+      }
+
+      const acceptsJson = req.headers.accept && req.headers.accept.includes('application/json');
+      const wantsJson = req.query.json === 'true' || acceptsJson;
+
+      if (wantsJson && req.query.stream !== 'true') {
+        const protocol = req.protocol;
+        const host = req.get('host');
+        const url = `${protocol}://${host}/${resource.filePath}`;
+
+        return res.json({
+          success: true,
+          url,
+          type: 'local',
+          format: resource.format,
+          mimeType: resource.mimeType,
+          originalFileName: resource.originalFileName || resource.title,
+        });
+      }
+
+      // Stream file directly to browser (PDF, images, etc.)
+      res.setHeader('Content-Type', resource.mimeType || 'application/octet-stream');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${encodeURIComponent(resource.originalFileName || resource.title + path.extname(resource.filePath))}"`
+      );
+      return res.sendFile(fullPath);
     }
 
-    /* WASABI LOGIC COMMENTED OUT
-    // 🔥 PDF → ALWAYS PROXY (MOST IMPORTANT FIX)
-    if (resource.format === 'PDF' || req.query.proxy === 'true') {
-      const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
-
-      res.set({
-        'Content-Type': contentType,
-        'Content-Disposition': 'inline',
-        'Content-Length': buffer.length,
-        'Accept-Ranges': 'bytes',   // 🔥 THIS FIXES CHROME PDF
-        'Cache-Control': 'public, max-age=31536000',
-      });
-
-
-      return res.send(buffer);
-    }
-
-    // 🖼️ Images / others → signed URL ok
-    const url = await getSignedS3Url(resource.wasabiKey, 3600);
-
-    return res.json({
-      success: true,
-      url,
-      type: 'signed',
-      format: resource.format,
-      mimeType: resource.mimeType,
-    });
-    */
-    
-    return res.status(400).json({ message: "No file found for this resource" });
+    return res.status(400).json({ success: false, error: 'No file found for this resource' });
   } catch (error) {
-    console.error('❌ View error:', error);
-    return res.status(500).json({
+    console.error('viewResource error:', error);
+    res.status(500).json({
       success: false,
       error: 'Failed to view resource',
       message: error.message,
@@ -275,9 +359,8 @@ export const viewResource = async (req, res) => {
   }
 };
 
-
 /**
- * Download resource
+ * Download resource (Direct download with proper filename)
  */
 export const downloadResource = async (req, res) => {
   try {
@@ -290,28 +373,27 @@ export const downloadResource = async (req, res) => {
       });
     }
 
-    if (resource.filePath && fs.existsSync(resource.filePath)) {
-      return res.download(resource.filePath, resource.title);
+    if (resource.filePath) {
+      const fullPath = path.resolve(resource.filePath);
+
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({
+          success: false,
+          error: 'File does not exist on storage server',
+        });
+      }
+
+      const downloadName = resource.originalFileName || `${resource.title}${path.extname(resource.filePath)}`;
+      return res.download(fullPath, downloadName);
     }
 
-    /* WASABI LOGIC COMMENTED OUT
-    if (!resource.wasabiKey) {
-       return res.status(404).json({ success: false, error: 'File not found' });
+    if (resource.externalLink) {
+      return res.redirect(resource.externalLink);
     }
-    // Proxy download
-    const { buffer, contentType } = await getFileBuffer(resource.wasabiKey);
 
-    res.set({
-      'Content-Type': contentType,
-      'Content-Disposition': `attachment; filename="${resource.title}"`,
-      'Content-Length': buffer.length,
-    });
-
-    return res.send(buffer);
-    */
-    
-    return res.status(404).json({ success: false, error: 'File not found localy' });
+    return res.status(404).json({ success: false, error: 'No file available for download' });
   } catch (error) {
+    console.error('downloadResource error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to download resource',
@@ -321,42 +403,91 @@ export const downloadResource = async (req, res) => {
 };
 
 /**
- * Update resource
+ * Update resource metadata or replace file
  */
 export const updateResource = async (req, res) => {
   try {
-    const updates = req.body;
-
-    if (updates.tags && typeof updates.tags === 'string') {
-      updates.tags = updates.tags.split(',').map(t => t.trim());
-    }
-
-    const resource = await Resource.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { new: true, runValidators: true }
-    );
-
+    const resource = await Resource.findById(req.params.id);
     if (!resource) {
       return res.status(404).json({ success: false, error: 'Resource not found' });
     }
 
+    const {
+      title,
+      category,
+      subcategory,
+      tags,
+      description,
+      author,
+      format,
+      status,
+      externalLink,
+    } = req.body;
+
+    if (title) resource.title = title.trim();
+    if (category) resource.category = category.trim();
+    if (subcategory !== undefined) resource.subcategory = subcategory ? subcategory.trim() : '';
+    if (description !== undefined) resource.description = description.trim();
+    if (author) resource.author = author.trim();
+    if (format) resource.format = format;
+    if (status && ['pending', 'approved', 'rejected'].includes(status)) {
+      resource.status = status;
+    }
+    if (externalLink) resource.externalLink = externalLink.trim();
+
+    if (tags !== undefined) {
+      resource.tags = Array.isArray(tags)
+        ? tags
+        : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
+    }
+
+    // If replacement file uploaded
+    if (req.file) {
+      // Remove old file if exists
+      if (resource.filePath && fs.existsSync(resource.filePath)) {
+        try {
+          fs.unlinkSync(resource.filePath);
+        } catch (e) {
+          console.warn('Failed to delete old file during replace:', e);
+        }
+      }
+
+      const { format: newFormat, icon: newIcon } = getFormatAndIcon(req.file.originalname);
+      resource.filePath = req.file.path.replace(/\\/g, '/');
+      resource.originalFileName = req.file.originalname;
+      resource.fileSize = req.file.size;
+      resource.mimeType = req.file.mimetype;
+      resource.format = newFormat;
+      resource.icon = newIcon;
+    }
+
+    // Sync folder ID
+    if (category) {
+      const folderDoc = await ResourceCategory.findOne({ name: resource.category });
+      if (folderDoc) {
+        resource.folder = folderDoc._id;
+      }
+    }
+
+    await resource.save();
+
     res.json({
       success: true,
       message: 'Resource updated successfully',
-      resource
+      resource,
     });
   } catch (error) {
+    console.error('updateResource error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update resource',
-      message: error.message
+      message: error.message,
     });
   }
 };
 
 /**
- * Delete resource
+ * Delete resource and clean up disk file
  */
 export const deleteResource = async (req, res) => {
   try {
@@ -366,21 +497,20 @@ export const deleteResource = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Resource not found' });
     }
 
-    // Delete local file
+    // Clean up local disk file
     if (resource.filePath && fs.existsSync(resource.filePath)) {
-      fs.unlinkSync(resource.filePath);
+      try {
+        fs.unlinkSync(resource.filePath);
+      } catch (err) {
+        console.warn('Error deleting physical file:', err);
+      }
     }
-
-    /* WASABI LOGIC COMMENTED OUT
-    if (resource.wasabiKey) {
-      await deleteFilesFromS3(resource.wasabiKey);
-    }
-    */
 
     await resource.deleteOne();
 
     res.json({ success: true, message: 'Resource deleted successfully' });
   } catch (error) {
+    console.error('deleteResource error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to delete resource',
@@ -390,21 +520,20 @@ export const deleteResource = async (req, res) => {
 };
 
 /**
- * Category stats
+ * Category stats for Knowledge Hub filters
  */
 export const getCategoryStats = async (req, res) => {
   try {
-    // Exclude pending resources
-    const matchStage = { status: { $ne: 'pending' } };
+    const matchStage = { status: 'approved' };
 
     const stats = await Resource.aggregate([
       { $match: matchStage },
       {
         $group: {
           _id: '$category',
-          count: { $sum: 1 }
-        }
-      }
+          count: { $sum: 1 },
+        },
+      },
     ]);
 
     const total = await Resource.countDocuments(matchStage);
@@ -414,18 +543,17 @@ export const getCategoryStats = async (req, res) => {
       categories: [
         { name: 'All resources', count: total },
         ...stats.map(s => ({
-          name: s._id,
-          count: s.count
-        }))
-      ]
+          name: s._id || 'Uncategorized',
+          count: s.count,
+        })),
+      ],
     });
   } catch (error) {
+    console.error('getCategoryStats error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch category statistics',
-      message: error.message
+      message: error.message,
     });
   }
 };
-
-

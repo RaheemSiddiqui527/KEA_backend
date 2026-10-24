@@ -24,12 +24,22 @@ export const getAllDisciplines = async (req, res) => {
 export const createDiscipline = async (req, res) => {
   try {
     const { name, type, isActive } = req.body;
-    if (!name) return res.status(400).json({ success: false, error: 'Discipline name is required' });
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Discipline name is required' });
+    }
 
-    const discipline = await Discipline.create({ name, type, isActive: isActive !== undefined ? isActive : true });
+    const discipline = await Discipline.create({
+      name: name.trim(),
+      type: type || 'Uncategorized',
+      isActive: isActive !== undefined ? isActive : true,
+    });
     res.status(201).json({ success: true, discipline });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to create discipline. It might already exist.' });
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, error: 'A discipline with this name already exists' });
+    }
+    console.error('Error creating discipline:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create discipline' });
   }
 };
 
@@ -38,13 +48,20 @@ export const updateDiscipline = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+    if (updates.name) {
+      updates.name = updates.name.trim();
+    }
 
     const discipline = await Discipline.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
     if (!discipline) return res.status(404).json({ success: false, error: 'Discipline not found' });
 
     res.json({ success: true, discipline });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to update discipline' });
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, error: 'A discipline with this name already exists' });
+    }
+    console.error('Error updating discipline:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update discipline' });
   }
 };
 

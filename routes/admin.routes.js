@@ -3,7 +3,8 @@ import rateLimit from 'express-rate-limit';
 import AdminController, { adminGetAllResources, adminGetStats, approveResource, rejectResource } from '../controllers/admin.controller.js';
 import { auth } from '../middleware/auth.middleware.js';
 import { requireRole } from '../middleware/role.middleware.js';
-import { deleteResource, getResourceById } from '../controllers/resource.controller.js';
+import { deleteResource, getResourceById, uploadResource, createResource, updateResource, downloadResource } from '../controllers/resource.controller.js';
+import upload from '../middleware/upload.middleware.js';
 import { sendBulkEmail, getEmailLogs } from '../controllers/communications.controller.js';
 
 const router = express.Router();
@@ -160,16 +161,20 @@ router.delete('/tools/:id', adminWriteLimiter, AdminController.deleteTool);
 // =====================
 
 // Read operations
-// ✅ SOLUTION: Use different routes or consolidate
 router.get('/resources', adminReadLimiter, adminGetAllResources);
 router.get('/resources/stats', adminReadLimiter, adminGetStats);
+router.get('/resources/:id', adminReadLimiter, getResourceById);
+router.get('/resources/:id/download', adminReadLimiter, downloadResource);
+
+// Upload / Create operations
+router.post('/resources/upload', adminWriteLimiter, upload.any(), uploadResource);
+router.post('/resources', adminWriteLimiter, createResource);
+
+// Update / Actions
+router.put('/resources/:id', adminWriteLimiter, upload.single('file'), updateResource);
 router.patch('/resources/:id/approve', adminWriteLimiter, approveResource);
 router.patch('/resources/:id/reject', adminWriteLimiter, rejectResource);
-router.get('/resources/:id', adminReadLimiter, getResourceById);
 router.delete('/resources/:id', adminWriteLimiter, deleteResource);
-
-// Write operations
-router.delete('/resources/:id', adminWriteLimiter, AdminController.deleteResource);
 
 // =====================
 // SEMINARS ROUTES

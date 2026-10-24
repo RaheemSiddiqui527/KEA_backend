@@ -5,6 +5,8 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  addSubcategory,
+  deleteSubcategory,
 } from '../controllers/resourceCategory.controller.js';
 
 const router = express.Router();
@@ -17,4 +19,9 @@ router.post('/', auth, isAdmin, createCategory);
 router.put('/:id', auth, isAdmin, updateCategory);
 router.delete('/:id', auth, isAdmin, deleteCategory);
 
+// Subcategory / nested folder management
+router.post('/:id/subcategories', auth, isAdmin, addSubcategory);
+router.delete('/:id/subcategories/:subName', auth, isAdmin, deleteSubcategory);
+
 export default router;
+

@@ -28,11 +28,10 @@ const disciplineSchema = new mongoose.Schema(
 );
 
 // Pre-save hook to populate nameLower
-disciplineSchema.pre('save', function (next) {
+disciplineSchema.pre('save', function () {
   if (this.isModified('name')) {
     this.nameLower = this.name.trim().toLowerCase();
   }
-  next();
 });
 
 // Also handle updates

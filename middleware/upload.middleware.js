@@ -13,17 +13,17 @@ if (!fs.existsSync(UPLOAD_PATH)) {
 }
 
 /**
- * Allow only documents
+ * Allow documents, presentations, spreadsheets, and media
  */
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /pdf|doc|docx/;
-  const extname = allowedTypes.test(
-    path.extname(file.originalname).toLowerCase()
-  );
-  const mimetype = allowedTypes.test(file.mimetype);
+  const allowedExts = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|txt|rtf|jpg|jpeg|png|webp|mp4|mov|avi)$/i;
+  const extValid = allowedExts.test(path.extname(file.originalname).toLowerCase());
 
-  if (extname && mimetype) cb(null, true);
-  else cb(new Error("Only PDF and Word documents allowed"));
+  if (extValid) {
+    cb(null, true);
+  } else {
+    cb(new Error("Unsupported file type. Supported: PDF, Word (DOC/DOCX), PowerPoint (PPT/PPTX), Excel (XLS/XLSX), Text, Images, and Videos"));
+  }
 };
 
 /**
@@ -45,7 +45,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   fileFilter,
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
 });
 
 /* WASABI STORAGE CONFIG (COMMENTED OUT)

@@ -42,6 +42,16 @@ const resourceSchema = new mongoose.Schema(
       type: String,
     },
 
+    originalFileName: {
+      type: String,
+      trim: true,
+    },
+
+    folder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ResourceCategory',
+    },
+
     // 🔐 For Wasabi stored files only
     wasabiKey: {
       type: String,

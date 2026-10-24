@@ -12,11 +12,14 @@ import ResourceCategory from '../models/resourceCategory.models.js';
 import Discipline from '../models/discipline.models.js';
 
 const initialCategories = [
-  { name: 'Career guidance', subcategories: [] },
-  { name: 'Technical papers', subcategories: [] },
-  { name: 'Project reports', subcategories: [] },
-  { name: 'Workshop & webinars', subcategories: [] },
-  { name: 'Templates & checklists', subcategories: [] },
+  { name: 'AI/ML', subcategories: ['Deep Learning', 'NLP', 'Computer Vision', 'LLMs & Prompting'] },
+  { name: 'Career guidance', subcategories: ['Resume Writing', 'Interview Prep', 'Higher Studies', 'Certifications'] },
+  { name: 'Chemical', subcategories: ['Process Design', 'Plant Operations', 'Petrochemical', 'Thermodynamics'] },
+  { name: 'Civil', subcategories: ['Structural', 'Geotechnical', 'Transportation', 'Water Resources'] },
+  { name: 'Computer Science', subcategories: ['Algorithms', 'Data Structures', 'Operating Systems', 'Networking'] },
+  { name: 'Data Science', subcategories: ['Data Analysis', 'Big Data', 'Data Visualization', 'Statistics'] },
+  { name: 'Electrical', subcategories: ['Power Systems', 'Control Systems', 'Renewable Energy', 'High Voltage'] },
+  { name: 'Electronics', subcategories: ['Embedded Systems', 'VLSI Design', 'IoT', 'Signal Processing'] },
   { 
     name: 'HSE – Health, Safety & Environment', 
     subcategories: [
@@ -25,15 +28,12 @@ const initialCategories = [
       'Environmental Management', 'Sustainability', 'Waste Management', 'Pollution Control', 'Environmental Protection', 'Climate Awareness', 'ISO 14001', 'Environmental Compliance'
     ]
   },
-  { name: 'Civil', subcategories: [] },
-  { name: 'Mechanical', subcategories: [] },
-  { name: 'Electrical', subcategories: [] },
-  { name: 'Computer Science', subcategories: [] },
-  { name: 'Electronics', subcategories: [] },
-  { name: 'Chemical', subcategories: [] },
-  { name: 'IT', subcategories: [] },
-  { name: 'AI/ML', subcategories: [] },
-  { name: 'Data Science', subcategories: [] }
+  { name: 'IT', subcategories: ['Software Architecture', 'Guide', 'DevOps', 'Security', 'Cloud Computing', 'Web Development'] },
+  { name: 'Mechanical', subcategories: ['HVAC Design', 'CAD & 3D Modeling', 'Thermal Engineering', 'Automotive', 'Manufacturing'] },
+  { name: 'Project reports', subcategories: ['Feasibility Study', 'DPR Reports', 'Case Studies', 'Audit Reports'] },
+  { name: 'Technical papers', subcategories: ['Research Journals', 'Conference Papers', 'Patents', 'Standards'] },
+  { name: 'Templates & checklists', subcategories: ['Civil', 'Checklists', 'Design', 'QA', 'SOPs', 'Inspection Forms'] },
+  { name: 'Workshop & webinars', subcategories: ['Recordings', 'Upcoming Sessions', 'Presentation Slides', 'Notes'] }
 ];
 
 const initialDisciplines = [
@@ -71,7 +71,7 @@ const seedDB = async () => {
     for (const cat of initialCategories) {
       await ResourceCategory.findOneAndUpdate(
         { name: cat.name },
-        cat,
+        { $set: { name: cat.name, subcategories: cat.subcategories } },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
     }
@@ -79,11 +79,24 @@ const seedDB = async () => {
 
     console.log('Seeding Disciplines...');
     for (const disc of initialDisciplines) {
-      await Discipline.findOneAndUpdate(
-        { nameLower: disc.name.toLowerCase() },
-        { ...disc, nameLower: disc.name.toLowerCase() },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+      const lower = disc.name.trim().toLowerCase();
+      const existing = await Discipline.findOne({
+        $or: [{ name: disc.name }, { nameLower: lower }],
+      });
+      if (!existing) {
+        await Discipline.create({
+          name: disc.name,
+          nameLower: lower,
+          type: disc.type,
+          isActive: true,
+        });
+      } else {
+        existing.name = disc.name;
+        existing.nameLower = lower;
+        existing.type = disc.type;
+        existing.isActive = true;
+        await existing.save();
+      }
     }
     console.log('Disciplines seeded successfully');
 

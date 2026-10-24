@@ -1241,12 +1241,18 @@ export const adminGetAllResources = async (req, res) => {
       query.category = category;
     }
 
+    const { subcategory } = req.query;
+    if (subcategory && subcategory !== 'all') {
+      query.subcategory = subcategory;
+    }
+
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
         { tags: { $regex: search, $options: 'i' } },
-        { author: { $regex: search, $options: 'i' } }
+        { author: { $regex: search, $options: 'i' } },
+        { originalFileName: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -1286,11 +1292,22 @@ export const adminGetAllResources = async (req, res) => {
  */
 export const adminGetStats = async (req, res) => {
   try {
-    const [total, pending, approved, rejected] = await Promise.all([
+    const [total, pending, approved, rejected, categories] = await Promise.all([
       Resource.countDocuments(),
       Resource.countDocuments({ status: 'pending' }),
       Resource.countDocuments({ status: 'approved' }),
-      Resource.countDocuments({ status: 'rejected' })
+      Resource.countDocuments({ status: 'rejected' }),
+      Resource.aggregate([
+        {
+          $group: {
+            _id: '$category',
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $sort: { count: -1 },
+        },
+      ]),
     ]);
 
     res.json({
@@ -1299,9 +1316,17 @@ export const adminGetStats = async (req, res) => {
         total,
         pending,
         approved,
-        rejected
-      }
+        rejected,
+      },
+      categories: [
+        { name: 'All resources', count: total },
+        ...categories.map((cat) => ({
+          name: cat._id || 'Uncategorized',
+          count: cat.count,
+        })),
+      ],
     });
+
   } catch (error) {
     console.error('Admin Get Stats Error:', error);
     res.status(500).json({
