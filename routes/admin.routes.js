@@ -74,9 +74,11 @@ router.get('/members', adminReadLimiter, AdminController.getAllMembers);
 router.get('/members/pending', adminReadLimiter, AdminController.pendingMembers);
 router.get('/members/:id', adminReadLimiter, AdminController.getMemberById);
 
-// Write operations (approval/rejection)
+// Write operations (approval/rejection/reactivation/deletion)
 router.patch('/members/:id/approve', adminWriteLimiter, AdminController.approveMember);
 router.patch('/members/:id/reject', adminWriteLimiter, AdminController.rejectMember);
+router.patch('/members/:id/reactivate', adminWriteLimiter, AdminController.reactivateMember);
+router.delete('/members/:id', adminWriteLimiter, AdminController.deleteMember);
 
 // =====================
 // JOBS ROUTES

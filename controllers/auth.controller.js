@@ -200,6 +200,12 @@ export const login = async (req, res, next) => {
     if (user.role === "admin")
       return res.status(403).json({ message: "Admins must use the admin login portal" });
 
+    if (user.membershipStatus === "inactive")
+      return res.status(403).json({ message: "Your membership has been deactivated." });
+
+    if (user.membershipStatus === "pending")
+      return res.status(403).json({ message: "Your membership is pending admin approval." });
+
     const token = signToken(user);
 
     res.json({

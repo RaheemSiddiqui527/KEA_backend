@@ -559,6 +559,62 @@ const rejectMember = async (req, res, next) => {
   }
 };
 
+// ---------------------------------------
+// REACTIVATE MEMBER
+// ---------------------------------------
+const reactivateMember = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const member = await User.findById(id);
+    if (!member) {
+      return res.status(404).json({ message: 'Member not found' });
+    }
+
+    if (member.role === 'admin' || member.role === 'superadmin') {
+      return res.status(400).json({ message: 'Cannot modify admin account status from member management' });
+    }
+
+    member.membershipStatus = 'active';
+    member.rejectionReason = '';
+    await member.save();
+
+    res.json({ message: 'Member reactivated successfully', member });
+  } catch (err) {
+    console.error('Error reactivating member:', err);
+    next(err);
+  }
+};
+
+// ---------------------------------------
+// DELETE MEMBER
+// ---------------------------------------
+const deleteMember = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user && req.user._id && req.user._id.toString() === id) {
+      return res.status(400).json({ message: 'You cannot delete your own account' });
+    }
+
+    const member = await User.findById(id);
+    if (!member) {
+      return res.status(404).json({ message: 'Member not found' });
+    }
+
+    if (member.role === 'admin' || member.role === 'superadmin') {
+      return res.status(400).json({ message: 'Cannot delete admin accounts from member management' });
+    }
+
+    await User.findByIdAndDelete(id);
+
+    res.json({ message: 'Member deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting member:', err);
+    next(err);
+  }
+};
+
 
 // Jobs
 const getAllJobs = async (req, res, next) => {
@@ -1980,6 +2036,8 @@ export default {
   pendingMembers,
   approveMember,
   rejectMember,
+  reactivateMember,
+  deleteMember,
   pendingJobs,
   approveJob,
   rejectJob,
