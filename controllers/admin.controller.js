@@ -397,16 +397,22 @@ const getAllMembers = async (req, res, next) => {
     const status = req.query.status || "all";
     const category = req.query.category || "all";
 
+    const role = req.query.role || "all";
+
     // 1. Build Query
-    const query = { role: "user" };
+    const query = {};
+
+    if (role !== "all") {
+      query.role = role;
+    }
 
     if (status !== "all") {
       if (status === "pending") {
         query.membershipStatus = "pending";
       } else if (status === "approved" || status === "active") {
-        query.membershipStatus = "active";
+        query.membershipStatus = { $in: ["active", "approved"] };
       } else if (status === "rejected" || status === "inactive") {
-        query.membershipStatus = "inactive";
+        query.membershipStatus = { $in: ["inactive", "rejected"] };
       }
     }
 
@@ -443,10 +449,10 @@ const getAllMembers = async (req, res, next) => {
       [members, totalFiltered] = await Promise.all([queryPromise, countPromise]);
     } else {
       const statsPromise = Promise.all([
-        User.countDocuments({ role: "user" }),
-        User.countDocuments({ role: "user", membershipStatus: "pending" }),
-        User.countDocuments({ role: "user", membershipStatus: "active" }),
-        User.countDocuments({ role: "user", membershipStatus: "inactive" })
+        User.countDocuments(),
+        User.countDocuments({ membershipStatus: "pending" }),
+        User.countDocuments({ membershipStatus: { $in: ["active", "approved"] } }),
+        User.countDocuments({ membershipStatus: { $in: ["inactive", "rejected"] } })
       ]);
       const [membersResult, totalFilteredResult, statsResult] = await Promise.all([
         queryPromise,

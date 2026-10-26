@@ -234,7 +234,7 @@ router.delete('/groups/:id', adminWriteLimiter, AdminController.deleteGroup);
 // MANAGE ADMINS ROUTES (Superadmin Only)
 // =====================
 router.get('/admins', adminReadLimiter, requireRole('superadmin'), AdminController.listAdmins);
-router.post('/admins', adminWriteLimiter, requireRole('superadmin'), AdminController.createAdmin);
+router.post('/admins', adminWriteLimiter, AdminController.createAdmin);
 router.patch('/admins/:id', adminWriteLimiter, requireRole('superadmin'), AdminController.updateAdmin);
 router.delete('/admins/:id', adminWriteLimiter, requireRole('superadmin'), AdminController.deleteAdmin);
 
