@@ -572,13 +572,17 @@ const reactivateMember = async (req, res, next) => {
   try {
     const { id } = req.params;
 
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid member ID' });
+    }
+
     const member = await User.findById(id);
     if (!member) {
       return res.status(404).json({ message: 'Member not found' });
     }
 
-    if (member.role === 'admin' || member.role === 'superadmin') {
-      return res.status(400).json({ message: 'Cannot modify admin account status from member management' });
+    if (member.role === 'superadmin') {
+      return res.status(400).json({ message: 'Cannot modify superadmin account status' });
     }
 
     member.membershipStatus = 'active';
@@ -599,6 +603,10 @@ const deleteMember = async (req, res, next) => {
   try {
     const { id } = req.params;
 
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid member ID' });
+    }
+
     if (req.user && req.user._id && req.user._id.toString() === id) {
       return res.status(400).json({ message: 'You cannot delete your own account' });
     }
@@ -608,8 +616,8 @@ const deleteMember = async (req, res, next) => {
       return res.status(404).json({ message: 'Member not found' });
     }
 
-    if (member.role === 'admin' || member.role === 'superadmin') {
-      return res.status(400).json({ message: 'Cannot delete admin accounts from member management' });
+    if (member.role === 'superadmin') {
+      return res.status(400).json({ message: 'Cannot delete superadmin accounts' });
     }
 
     await User.findByIdAndDelete(id);
