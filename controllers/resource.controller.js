@@ -534,6 +534,9 @@ export const getCategoryStats = async (req, res) => {
           count: { $sum: 1 },
         },
       },
+      {
+        $sort: { count: -1 },
+      },
     ]);
 
     const total = await Resource.countDocuments(matchStage);
@@ -542,10 +545,12 @@ export const getCategoryStats = async (req, res) => {
       success: true,
       categories: [
         { name: 'All resources', count: total },
-        ...stats.map(s => ({
-          name: s._id || 'Uncategorized',
-          count: s.count,
-        })),
+        ...stats
+          .filter((s) => s._id && s.count > 0)
+          .map((s) => ({
+            name: s._id,
+            count: s.count,
+          })),
       ],
     });
   } catch (error) {

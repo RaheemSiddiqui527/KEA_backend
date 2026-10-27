@@ -1,5 +1,5 @@
 import express from 'express';
-import { auth } from '../middleware/auth.middleware.js';
+import { auth, optionalAuth } from '../middleware/auth.middleware.js';
 import upload from '../middleware/upload.middleware.js';
 
 import {
@@ -17,8 +17,8 @@ import {
 const router = express.Router();
 
 // ================= STATS & LISTING =================
-router.get('/categories/stats', auth, getCategoryStats);
-router.get('/', auth, getAllResources);
+router.get('/categories/stats', optionalAuth, getCategoryStats);
+router.get('/', optionalAuth, getAllResources);
 
 // ================= ADMIN ALIASES (MUST BE BEFORE :id) =================
 router.post('/admin/upload', auth, upload.any(), uploadResource);
