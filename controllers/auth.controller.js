@@ -19,11 +19,11 @@ const signToken = (user) => {
 // ---------------------------------------
 export const register = async (req, res, next) => {
   try {
-    const { 
-      name, 
-      email, 
+    const {
+      name,
+      email,
       password,
-      role, 
+      role,
       profile,
       category,
       membershipStatus

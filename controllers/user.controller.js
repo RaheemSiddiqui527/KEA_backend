@@ -21,8 +21,8 @@ export const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     res.json(user);
-  } catch (err) { 
-    next(err); 
+  } catch (err) {
+    next(err);
   }
 };
 
@@ -77,7 +77,7 @@ export const updateMe = async (req, res, next) => {
 export const updatePreferences = async (req, res, next) => {
   try {
     const { notificationPreferences } = req.body;
-    
+
     if (!notificationPreferences) {
       return res.status(400).json({ message: 'Preferences required' });
     }
@@ -163,17 +163,17 @@ export const getUserNotifications = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const { limit = 10, unreadOnly = false } = req.query;
-    
+
     const query = { recipient: userId };
-    
+
     if (unreadOnly === 'true') {
       query.read = false;
     }
-    
+
     const notifications = await Notification.find(query)
       .sort({ createdAt: -1 })
       .limit(parseInt(limit));
-    
+
     res.json(notifications);
   } catch (err) {
     console.error('Notifications error:', err);
@@ -189,11 +189,11 @@ export const markNotificationRead = async (req, res, next) => {
       { read: true },
       { new: true }
     );
-    
+
     if (!notification) {
       return res.status(404).json({ message: 'Notification not found' });
     }
-    
+
     res.json(notification);
   } catch (err) {
     next(err);
@@ -325,12 +325,12 @@ export const deleteResume = async (req, res, next) => {
 export const listMembers = async (req, res, next) => {
   try {
     const { search, category, location, page = 1, limit = 20 } = req.query;
-    
-    const query = { 
+
+    const query = {
       membershipStatus: 'active',
-      role: 'user' 
+      role: 'user'
     };
-    
+
     // Add search filter
     if (search) {
       query.$or = [
@@ -339,19 +339,19 @@ export const listMembers = async (req, res, next) => {
         { 'profile.bio': { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     // Add category filter
     if (category) {
       query['profile.category'] = category;
     }
-    
+
     // Add location filter
     if (location) {
       query['profile.location'] = { $regex: location, $options: 'i' };
     }
-    
+
     const skip = (page - 1) * limit;
-    
+
     const [members, total] = await Promise.all([
       User.find(query)
         .select('-password')
@@ -360,7 +360,7 @@ export const listMembers = async (req, res, next) => {
         .sort({ createdAt: -1 }),
       User.countDocuments(query)
     ]);
-    
+
     res.json({
       members,
       pagination: {
@@ -370,8 +370,8 @@ export const listMembers = async (req, res, next) => {
         pages: Math.ceil(total / limit)
       }
     });
-  } catch (err) { 
-    next(err); 
+  } catch (err) {
+    next(err);
   }
 };
 
@@ -380,14 +380,14 @@ export const getMember = async (req, res, next) => {
   try {
     const member = await User.findById(req.params.id)
       .select('-password');
-      
+
     if (!member) {
       return res.status(404).json({ message: 'Member not found' });
     }
-    
+
     res.json(member);
-  } catch (err) { 
-    next(err); 
+  } catch (err) {
+    next(err);
   }
 };
 
@@ -395,22 +395,22 @@ export const getMember = async (req, res, next) => {
 export const saveJob = async (req, res, next) => {
   try {
     const { jobId } = req.body;
-    
+
     // Check if already saved
     const existing = await SavedJob.findOne({
       user: req.user._id,
       job: jobId
     });
-    
+
     if (existing) {
       return res.status(400).json({ message: 'Job already saved' });
     }
-    
+
     const savedJob = await SavedJob.create({
       user: req.user._id,
       job: jobId
     });
-    
+
     // Create activity
     await Activity.create({
       user: req.user._id,
@@ -420,7 +420,7 @@ export const saveJob = async (req, res, next) => {
       relatedId: jobId,
       relatedModel: 'Job'
     }).catch(err => console.log('⚠️ Activity creation failed:', err));
-    
+
     res.json(savedJob);
   } catch (err) {
     next(err);
@@ -446,11 +446,11 @@ export const deleteSavedJob = async (req, res, next) => {
       _id: req.params.id,
       user: req.user._id
     });
-    
+
     if (!savedJob) {
       return res.status(404).json({ message: 'Saved job not found' });
     }
-    
+
     res.json({ message: 'Job removed from saved list' });
   } catch (err) {
     next(err);
@@ -461,17 +461,17 @@ export const deleteSavedJob = async (req, res, next) => {
 export const applyForJob = async (req, res, next) => {
   try {
     const { jobId, coverLetter, resumeId } = req.body;
-    
+
     // Check if already applied
     const existing = await JobApplication.findOne({
       user: req.user._id,
       job: jobId
     });
-    
+
     if (existing) {
       return res.status(400).json({ message: 'Already applied for this job' });
     }
-    
+
     const application = await JobApplication.create({
       user: req.user._id,
       job: jobId,
@@ -479,7 +479,7 @@ export const applyForJob = async (req, res, next) => {
       resume: resumeId,
       status: 'pending'
     });
-    
+
     // Create activity
     await Activity.create({
       user: req.user._id,
@@ -489,7 +489,7 @@ export const applyForJob = async (req, res, next) => {
       relatedId: jobId,
       relatedModel: 'Job'
     }).catch(err => console.log('⚠️ Activity creation failed:', err));
-    
+
     res.json(application);
   } catch (err) {
     next(err);
@@ -512,23 +512,23 @@ export const getMyApplications = async (req, res, next) => {
 export const registerForEvent = async (req, res, next) => {
   try {
     const { eventId } = req.body;
-    
+
     // Check if already registered
     const existing = await EventRegistration.findOne({
       user: req.user._id,
       event: eventId
     });
-    
+
     if (existing) {
       return res.status(400).json({ message: 'Already registered for this event' });
     }
-    
+
     const registration = await EventRegistration.create({
       user: req.user._id,
       event: eventId,
       status: 'confirmed'
     });
-    
+
     // Create activity
     await Activity.create({
       user: req.user._id,
@@ -538,7 +538,7 @@ export const registerForEvent = async (req, res, next) => {
       relatedId: eventId,
       relatedModel: 'Event'
     }).catch(err => console.log('⚠️ Activity creation failed:', err));
-    
+
     res.json(registration);
   } catch (err) {
     next(err);
@@ -561,27 +561,27 @@ export const getMyEventRegistrations = async (req, res, next) => {
 export const connectWithUser = async (req, res, next) => {
   try {
     const { userId } = req.body;
-    
+
     if (userId === req.user._id.toString()) {
       return res.status(400).json({ message: 'Cannot connect with yourself' });
     }
-    
+
     // Check if already connected
     const existing = await Connection.findOne({
       user: req.user._id,
       connectedUser: userId
     });
-    
+
     if (existing) {
       return res.status(400).json({ message: 'Already connected' });
     }
-    
+
     const connection = await Connection.create({
       user: req.user._id,
       connectedUser: userId,
       status: 'pending'
     });
-    
+
     // Create activity
     await Activity.create({
       user: req.user._id,
@@ -591,7 +591,7 @@ export const connectWithUser = async (req, res, next) => {
       relatedId: userId,
       relatedModel: 'User'
     }).catch(err => console.log('⚠️ Activity creation failed:', err));
-    
+
     res.json(connection);
   } catch (err) {
     next(err);
@@ -601,7 +601,7 @@ export const connectWithUser = async (req, res, next) => {
 // Get my connections
 export const getMyConnections = async (req, res, next) => {
   try {
-    const connections = await Connection.find({ 
+    const connections = await Connection.find({
       user: req.user._id,
       status: 'accepted'
     })
@@ -627,11 +627,11 @@ export const updateAvatar = async (req, res, next) => {
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { 
-        $set: { 
+      {
+        $set: {
           avatar: fullUrl,
           "profile.avatar": fullUrl
-        } 
+        }
       },
       { new: true, runValidators: true }
     ).select('-password');
