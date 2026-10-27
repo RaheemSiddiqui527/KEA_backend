@@ -13,20 +13,20 @@ const router = express.Router();
 // RATE LIMITERS
 // =====================
 
-// Standard rate limiter for admin GET requests - 200 requests per 15 minutes
+// Standard rate limiter for admin GET requests
 const adminReadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: process.env.NODE_ENV === 'production' ? 1500 : 10000,
   message: 'Too many requests from this admin account, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
 });
 
-// Moderate rate limiter for admin write operations - 100 requests per 15 minutes
+// Moderate rate limiter for admin write operations
 const adminWriteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: process.env.NODE_ENV === 'production' ? 500 : 3000,
   message: 'Too many write operations, please slow down',
   standardHeaders: true,
   legacyHeaders: false,
