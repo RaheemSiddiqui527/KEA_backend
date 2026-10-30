@@ -82,6 +82,11 @@ const UserSchema = new mongoose.Schema(
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
 
+    // Email verification fields
+    isEmailVerified: { type: Boolean, default: false },
+    emailVerificationToken: { type: String },
+    emailVerificationExpires: { type: Date },
+
     // Notification Preferences
     notificationPreferences: {
       email: { type: Boolean, default: true },
@@ -189,6 +194,8 @@ UserSchema.set("toJSON", {
     delete ret.password;
     delete ret.resetPasswordToken;
     delete ret.resetPasswordExpires;
+    delete ret.emailVerificationToken;
+    delete ret.emailVerificationExpires;
     return ret;
   },
 });

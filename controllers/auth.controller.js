@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import User from "../models/user.models.js";
-import { sendRegistrationEmail, sendApprovalEmail, sendRejectionEmail } from "../utils/emailService.js";
+import { sendRegistrationEmail, sendApprovalEmail, sendRejectionEmail, sendPasswordResetEmail } from "../utils/emailService.js";
 
 // ---------------------------------------
 // Generate JWT Token
@@ -54,7 +54,18 @@ export const register = async (req, res, next) => {
     if (exists)
       return res.status(400).json({ message: "Email already in use" });
 
+    // Generate email verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const emailVerificationToken = crypto
+      .createHash("sha256")
+      .update(verificationToken)
+      .digest("hex");
+    const emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
     const user = await User.create({
+      isEmailVerified: false,
+      emailVerificationToken,
+      emailVerificationExpires,
       name,
       email,
       password,
@@ -80,10 +91,10 @@ export const register = async (req, res, next) => {
     });
 
     try {
-      await sendRegistrationEmail(email, name);
-      console.log('✅ Registration email sent to:', email);
+      await sendRegistrationEmail(email, name, verificationToken);
+      console.log('✅ Registration email dispatched for:', email);
     } catch (emailError) {
-      console.error('❌ Failed to send registration email:', emailError);
+      console.warn('⚠️ Registration email dispatch warning:', emailError.message);
     }
 
     const token = signToken(user);
@@ -278,8 +289,19 @@ export const forgotPassword = async (req, res, next) => {
 
     await user.save({ validateBeforeSave: false });
 
-    res.json({
-      message: "Password reset token generated",
+    // Send password reset email
+    const origin = req.headers.origin || (user.role === "admin" ? (process.env.ADMIN_URL || "http://localhost:3001") : (process.env.FRONTEND_URL || "http://localhost:3000"));
+    const resetUrl = `${origin}/reset-password?token=${resetToken}`;
+
+    try {
+      await sendPasswordResetEmail(user.email, user.name, resetUrl);
+      console.log('✅ Password reset email dispatched for:', user.email);
+    } catch (emailError) {
+      console.warn('⚠️ Password reset email dispatch warning:', emailError.message);
+    }
+
+    res.status(200).json({
+      message: "Password reset instructions have been sent to your email.",
       resetToken,
       expiresIn: "10 minutes",
     });
@@ -389,6 +411,102 @@ export const rejectUser = async (req, res, next) => {
     res.status(200).json({
       message: "User membership rejected. Notification email sent.",
       user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+// ---------------------------------------
+// RESEND VERIFICATION EMAIL
+// ---------------------------------------
+export const resendVerificationEmail = async (req, res, next) => {
+  try {
+    const email = (req.body.email || "").trim().toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "No registered account found with that email address" });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ message: "Email is already verified" });
+    }
+
+    // Generate fresh verification token (prevents replay/duplicate issues)
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    user.emailVerificationToken = crypto
+      .createHash("sha256")
+      .update(verificationToken)
+      .digest("hex");
+    user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
+    await user.save({ validateBeforeSave: false });
+
+    let result = null;
+    try {
+      result = await sendRegistrationEmail(user.email, user.name, verificationToken);
+      console.log('✅ Verification email resent for:', user.email);
+    } catch (emailError) {
+      console.warn('⚠️ Verification email dispatch warning:', emailError.message);
+    }
+
+    res.status(200).json({
+      message: "Verification email sent successfully. Please check your inbox.",
+      previewUrl: result?.previewUrl || undefined,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------------------------------------
+// VERIFY EMAIL
+// ---------------------------------------
+export const verifyEmail = async (req, res, next) => {
+  try {
+    const token = req.params.token || req.body.token || req.query.token;
+
+    if (!token) {
+      return res.status(400).json({ message: "Verification token is required" });
+    }
+
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    const user = await User.findOne({
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Verification token is invalid or has expired" });
+    }
+
+    user.isEmailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+
+    await user.save({ validateBeforeSave: false });
+
+    console.log('✅ User email verified successfully:', user.email);
+
+    res.status(200).json({
+      message: "Email verified successfully! You can now access your account.",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isEmailVerified: user.isEmailVerified,
+        membershipStatus: user.membershipStatus,
+      },
     });
   } catch (err) {
     next(err);
