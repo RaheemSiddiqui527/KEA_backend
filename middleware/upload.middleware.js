@@ -45,7 +45,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   fileFilter,
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
 });
 
 /* WASABI STORAGE CONFIG (COMMENTED OUT)
