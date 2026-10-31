@@ -292,7 +292,7 @@ export const sendApprovalEmail = async (userEmail, userName) => {
     </html>
   `;
 
-  const text = `Password Reset Request - KEA\n\nHello ${userName || 'KEA Member'},\n\nWe received a request to reset the password for your KEA account associated with ${userEmail}.\n\nPlease use the following link to reset your password (valid for 10 minutes):\n${resetUrl}\n\nIf you did not request this password reset, please ignore this email.\n\nBest regards,\nKEA Team`;
+  const text = `Congratulations ${userName}!\n\nYour KEA Membership application has been approved by the KEA Team.\n\nYou now have full access to the member directory, engineering resources, and professional network.\n\nLog in here: ${process.env.FRONTEND_URL || 'https://kokaniengineers.org'}/login\n\nBest regards,\nKEA Team`;
 
   return sendEmail({ to: userEmail, subject, html, text });
 };
@@ -401,7 +401,9 @@ export const sendPasswordResetEmail = async (userEmail, userName, resetUrl) => {
     </html>
   `;
 
-  return sendEmail({ to: userEmail, subject, html });
+  const text = `Password Reset Request - KEA\n\nHello ${userName || 'KEA Member'},\n\nWe received a request to reset the password for your KEA account associated with ${userEmail}.\n\nPlease use the following link to reset your password (valid for 10 minutes):\n${resetUrl}\n\nIf you did not request this password reset, please ignore this email.\n\nBest regards,\nKEA Team`;
+
+  return sendEmail({ to: userEmail, subject, html, text });
 };
 
 // =======================================
