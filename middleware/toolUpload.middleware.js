@@ -47,7 +47,7 @@ const storage = multer.diskStorage({
 const toolUpload = multer({
   storage: storage,
   fileFilter,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit
+  limits: { fileSize: 550 * 1024 * 1024 }, // 500MB+ buffer
 });
 
 export default toolUpload;
