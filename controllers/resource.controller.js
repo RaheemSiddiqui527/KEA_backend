@@ -2,6 +2,28 @@ import Resource from '../models/resource.models.js';
 import ResourceCategory from '../models/resourceCategory.models.js';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Helper to reliably find physical file on disk across CWDs
+const getExistingFilePath = (filePath) => {
+  if (!filePath) return null;
+  if (path.isAbsolute(filePath) && fs.existsSync(filePath)) {
+    return filePath;
+  }
+  const candidate1 = path.resolve(filePath);
+  if (fs.existsSync(candidate1)) return candidate1;
+
+  const candidate2 = path.resolve(__dirname, '..', filePath);
+  if (fs.existsSync(candidate2)) return candidate2;
+
+  const candidate3 = path.resolve(process.cwd(), filePath);
+  if (fs.existsSync(candidate3)) return candidate3;
+
+  return null;
+};
 
 // Helper to determine format & icon from file extension
 const getFormatAndIcon = (fileName) => {
@@ -19,13 +41,13 @@ const getFormatAndIcon = (fileName) => {
   } else if (['.ppt', '.pptx'].includes(ext)) {
     format = 'File';
     icon = 'FileText';
-  } else if (['.xls', '.xlsx'].includes(ext)) {
+  } else if (['.xls', '.xlsx', '.csv'].includes(ext)) {
     format = 'File';
     icon = 'FileText';
-  } else if (['.mp4', '.avi', '.mov'].includes(ext)) {
+  } else if (['.mp4', '.avi', '.mov', '.mkv', '.webm'].includes(ext)) {
     format = 'Video';
     icon = 'Video';
-  } else if (['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext)) {
+  } else if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'].includes(ext)) {
     format = 'Images';
     icon = 'Image';
   }
@@ -51,11 +73,12 @@ export const getAllResources = async (req, res) => {
     } = req.query;
 
     const query = {};
+    const isAdminUser = req.user?.role === 'admin' || req.user?.role === 'superadmin';
 
     // For non-admin or public users, only return approved resources
-    if (req.user?.role === 'admin' && status && status !== 'all') {
+    if (isAdminUser && status && status !== 'all') {
       query.status = status;
-    } else if (req.user?.role !== 'admin') {
+    } else if (!isAdminUser) {
       query.status = 'approved';
     }
 
@@ -166,11 +189,14 @@ export const createResource = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Use upload API for file resources' });
     }
 
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
     const status = isAdmin ? (requestedStatus || 'approved') : 'pending';
 
-    // Find folder if exists
-    const folderDoc = await ResourceCategory.findOne({ name: category });
+    // Find folder if exists (case-insensitive)
+    const escapedCategory = category.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const folderDoc = await ResourceCategory.findOne({
+      name: { $regex: new RegExp(`^${escapedCategory}$`, 'i') }
+    });
 
     const resource = await Resource.create({
       title: title.trim(),
@@ -203,7 +229,15 @@ export const uploadResource = async (req, res) => {
     const files = req.files && req.files.length > 0 ? req.files : (req.file ? [req.file] : []);
 
     if (files.length === 0) {
-      return res.status(400).json({ success: false, error: 'No file(s) uploaded' });
+      if (req.skippedUploadFiles && req.skippedUploadFiles.length > 0) {
+        const skippedNames = req.skippedUploadFiles.map((f) => `"${f.originalname}"`).join(', ');
+        return res.status(400).json({
+          success: false,
+          error: `Unsupported file type for ${skippedNames}. Supported formats: PDF, Word (DOC/DOCX), PowerPoint (PPT/PPTX), Excel/CSV (XLS/XLSX/CSV), Text (TXT/RTF), Images (JPG/PNG/WEBP/GIF/SVG), and Videos (MP4/MOV/AVI/MKV/WEBM).`,
+          message: `Unsupported file type for ${skippedNames}.`,
+        });
+      }
+      return res.status(400).json({ success: false, error: 'No file(s) uploaded', message: 'No file(s) uploaded' });
     }
 
     const {
@@ -220,22 +254,36 @@ export const uploadResource = async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Destination folder / category is required',
+        message: 'Destination folder / category is required',
       });
     }
 
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
     const status = isAdmin ? (requestedStatus || 'approved') : 'pending';
 
-    // Find folder if exists or create if missing
-    let folderDoc = await ResourceCategory.findOne({ name: category.trim() });
+    // Find folder if exists (case-insensitive) or create if missing for admin
+    const escapedCategory = category.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let folderDoc = await ResourceCategory.findOne({
+      name: { $regex: new RegExp(`^${escapedCategory}$`, 'i') }
+    });
+
     if (!folderDoc && isAdmin) {
       folderDoc = await ResourceCategory.create({
         name: category.trim(),
         subcategories: subcategory ? [subcategory.trim()] : [],
       });
-    } else if (folderDoc && subcategory && !folderDoc.subcategories.includes(subcategory.trim())) {
-      folderDoc.subcategories.push(subcategory.trim());
-      await folderDoc.save();
+    } else if (folderDoc && subcategory) {
+      if (!Array.isArray(folderDoc.subcategories)) {
+        folderDoc.subcategories = [];
+      }
+      const trimmedSub = subcategory.trim();
+      const subExists = folderDoc.subcategories.some(
+        s => s.toLowerCase() === trimmedSub.toLowerCase()
+      );
+      if (!subExists) {
+        folderDoc.subcategories.push(trimmedSub);
+        await folderDoc.save();
+      }
     }
 
     const parsedTags = Array.isArray(tags)
@@ -243,43 +291,76 @@ export const uploadResource = async (req, res) => {
       : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
 
     const createdResources = [];
+    const uploadErrors = [];
 
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      const { format, icon } = getFormatAndIcon(f.originalname);
+      try {
+        const { format, icon } = getFormatAndIcon(f.originalname);
 
-      // If user supplied a title and there's 1 file, use title; otherwise default to clean file name
-      let docTitle = title && files.length === 1
-        ? title.trim()
-        : path.parse(f.originalname).name.replace(/[-_]/g, ' ');
+        // If user supplied a title and there's exactly 1 file, use that title; otherwise use clean file name
+        let docTitle = title && files.length === 1
+          ? title.trim()
+          : path.parse(f.originalname).name.replace(/[-_]/g, ' ').trim();
+        if (!docTitle) {
+          docTitle = f.originalname;
+        }
 
-      const resource = await Resource.create({
-        title: docTitle,
-        subtitle: `${category.trim()} • ${format}`,
-        category: category.trim(),
-        subcategory: subcategory ? subcategory.trim() : '',
-        folder: folderDoc?._id || undefined,
-        format,
-        tags: parsedTags,
-        filePath: f.path.replace(/\\/g, '/'),
-        originalFileName: f.originalname,
-        mimeType: f.mimetype,
-        fileSize: f.size,
-        description: description ? description.trim() : '',
-        author: author ? author.trim() : (isAdmin ? 'Admin' : 'Anonymous'),
-        icon,
-        status,
-        submittedBy: req.user?._id,
-      });
+        const normalizedFilePath = f.path.replace(/\\/g, '/');
 
-      createdResources.push(resource);
+        const resource = await Resource.create({
+          title: docTitle,
+          subtitle: `${category.trim()} • ${format}`,
+          category: category.trim(),
+          subcategory: subcategory ? subcategory.trim() : '',
+          folder: folderDoc?._id || undefined,
+          format,
+          tags: parsedTags,
+          filePath: normalizedFilePath,
+          originalFileName: f.originalname,
+          mimeType: f.mimetype || 'application/octet-stream',
+          fileSize: f.size,
+          description: description ? description.trim() : '',
+          author: author ? author.trim() : (isAdmin ? 'Admin' : 'Anonymous'),
+          icon,
+          status,
+          submittedBy: req.user?._id,
+        });
+
+        createdResources.push(resource);
+      } catch (fileErr) {
+        console.error(`Failed to create resource document for "${f.originalname}":`, fileErr);
+        // Clean up physical file on error
+        if (f.path && fs.existsSync(f.path)) {
+          try { fs.unlinkSync(f.path); } catch (e) { /* ignore */ }
+        }
+        uploadErrors.push({
+          fileName: f.originalname,
+          error: fileErr.message
+        });
+      }
     }
+
+    if (createdResources.length === 0 && uploadErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to upload document(s)',
+        message: uploadErrors.map(e => `${e.fileName}: ${e.error}`).join('; '),
+        errors: uploadErrors
+      });
+    }
+
+    const skippedNotice = req.skippedUploadFiles && req.skippedUploadFiles.length > 0
+      ? ` (${req.skippedUploadFiles.length} unsupported file(s) skipped)`
+      : '';
 
     res.status(201).json({
       success: true,
-      message: `${createdResources.length} document(s) uploaded successfully`,
+      message: `${createdResources.length} document(s) uploaded successfully${uploadErrors.length > 0 ? ` (${uploadErrors.length} failed)` : ''}${skippedNotice}`,
       resource: createdResources[0],
       resources: createdResources,
+      errors: uploadErrors.length > 0 ? uploadErrors : undefined,
+      skipped: req.skippedUploadFiles && req.skippedUploadFiles.length > 0 ? req.skippedUploadFiles : undefined,
     });
   } catch (error) {
     console.error('uploadResource error:', error);
@@ -315,9 +396,9 @@ export const viewResource = async (req, res) => {
 
     // Local file handling
     if (resource.filePath) {
-      const fullPath = path.resolve(resource.filePath);
+      const fullPath = getExistingFilePath(resource.filePath);
 
-      if (!fs.existsSync(fullPath)) {
+      if (!fullPath) {
         return res.status(404).json({ success: false, error: 'File not found on storage server' });
       }
 
@@ -374,9 +455,9 @@ export const downloadResource = async (req, res) => {
     }
 
     if (resource.filePath) {
-      const fullPath = path.resolve(resource.filePath);
+      const fullPath = getExistingFilePath(resource.filePath);
 
-      if (!fs.existsSync(fullPath)) {
+      if (!fullPath) {
         return res.status(404).json({
           success: false,
           error: 'File does not exist on storage server',

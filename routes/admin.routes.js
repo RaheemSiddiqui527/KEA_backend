@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import AdminController, { adminGetAllResources, adminGetStats, approveResource, rejectResource } from '../controllers/admin.controller.js';
 import { auth } from '../middleware/auth.middleware.js';
 import { requireRole } from '../middleware/role.middleware.js';
-import { deleteResource, getResourceById, uploadResource, createResource, updateResource, downloadResource } from '../controllers/resource.controller.js';
+import { deleteResource, getResourceById, uploadResource, createResource, updateResource, downloadResource, viewResource } from '../controllers/resource.controller.js';
 import upload from '../middleware/upload.middleware.js';
 import { sendBulkEmail, getEmailLogs } from '../controllers/communications.controller.js';
 
@@ -166,6 +166,7 @@ router.delete('/tools/:id', adminWriteLimiter, AdminController.deleteTool);
 router.get('/resources', adminReadLimiter, adminGetAllResources);
 router.get('/resources/stats', adminReadLimiter, adminGetStats);
 router.get('/resources/:id', adminReadLimiter, getResourceById);
+router.get('/resources/:id/view', adminReadLimiter, viewResource);
 router.get('/resources/:id/download', adminReadLimiter, downloadResource);
 
 // Upload / Create operations

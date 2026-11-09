@@ -1,13 +1,17 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-// Ensure upload directory exists
-const UPLOAD_PATH = "uploads/documents";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure upload directory exists using absolute path to prevent CWD discrepancies
+const UPLOAD_PATH = path.resolve(__dirname, "../uploads/documents");
 if (!fs.existsSync(UPLOAD_PATH)) {
   fs.mkdirSync(UPLOAD_PATH, { recursive: true });
 }
@@ -16,21 +20,30 @@ if (!fs.existsSync(UPLOAD_PATH)) {
  * Allow documents, presentations, spreadsheets, and media
  */
 const fileFilter = (req, file, cb) => {
-  const allowedExts = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|txt|rtf|jpg|jpeg|png|webp|mp4|mov|avi)$/i;
+  const allowedExts = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|csv|txt|rtf|jpg|jpeg|png|webp|gif|svg|mp4|mov|avi|mkv|webm)$/i;
   const extValid = allowedExts.test(path.extname(file.originalname).toLowerCase());
 
   if (extValid) {
     cb(null, true);
   } else {
-    cb(new Error("Unsupported file type. Supported: PDF, Word (DOC/DOCX), PowerPoint (PPT/PPTX), Excel (XLS/XLSX), Text, Images, and Videos"));
+    // Gracefully reject ONLY this individual file so other valid files in bulk upload are not aborted
+    req.skippedUploadFiles = req.skippedUploadFiles || [];
+    req.skippedUploadFiles.push({
+      originalname: file.originalname,
+      reason: `Unsupported file type (${path.extname(file.originalname) || 'shortcut'})`,
+    });
+    cb(null, false);
   }
 };
 
 /**
- * Multer Disk Storage Config (Switched from Wasabi)
+ * Multer Disk Storage Config
  */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
+    if (!fs.existsSync(UPLOAD_PATH)) {
+      fs.mkdirSync(UPLOAD_PATH, { recursive: true });
+    }
     cb(null, UPLOAD_PATH);
   },
   filename: (req, file, cb) => {
@@ -45,27 +58,11 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   fileFilter,
-  limits: { fileSize: 550 * 1024 * 1024 }, // 500MB+ buffer
+  limits: {
+    fileSize: 550 * 1024 * 1024, // 500MB+ buffer per file
+    files: 100, // Up to 100 files per bulk upload batch
+  },
 });
-
-/* WASABI STORAGE CONFIG (COMMENTED OUT)
-import multerS3 from "multer-s3";
-import { s3 } from "../config/wasabi.client.js";
-const BUCKET = process.env.AWS_BUCKET_NAME;
-const uploadS3 = multer({
-  storage: multerS3({
-    s3,
-    bucket: BUCKET,
-    contentType: multerS3.AUTO_CONTENT_TYPE,
-    key: (req, file, cb) => {
-      const ext = path.extname(file.originalname);
-      cb(null, `documents/${uuidv4()}${ext}`);
-    },
-  }),
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-});
-*/
 
 export default upload;
 

@@ -1308,12 +1308,14 @@ export const adminGetAllResources = async (req, res) => {
     }
 
     if (category && category !== 'all' && category !== 'All resources') {
-      query.category = category;
+      const escapedCat = category.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.category = { $regex: new RegExp(`^${escapedCat}$`, 'i') };
     }
 
     const { subcategory } = req.query;
     if (subcategory && subcategory !== 'all') {
-      query.subcategory = subcategory;
+      const escapedSub = subcategory.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.subcategory = { $regex: new RegExp(`^${escapedSub}$`, 'i') };
     }
 
     if (search) {
@@ -1326,14 +1328,16 @@ export const adminGetAllResources = async (req, res) => {
       ];
     }
 
-    const skip = (page - 1) * limit;
+    const numLimit = Math.max(1, Number(limit) || 12);
+    const numPage = Math.max(1, Number(page) || 1);
+    const skip = (numPage - 1) * numLimit;
 
     const [resources, total] = await Promise.all([
       Resource.find(query)
         .populate('submittedBy', 'name email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(numLimit),
       Resource.countDocuments(query)
     ]);
 
@@ -1342,9 +1346,9 @@ export const adminGetAllResources = async (req, res) => {
       resources,
       pagination: {
         total,
-        page: Number(page),
-        limit: Number(limit),
-        pages: Math.ceil(total / limit)
+        page: numPage,
+        limit: numLimit,
+        pages: Math.ceil(total / numLimit) || 1
       }
     });
   } catch (error) {

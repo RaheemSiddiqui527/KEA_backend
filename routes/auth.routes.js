@@ -16,6 +16,7 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password/:token", resetPassword);
+router.post("/reset-password", resetPassword);
 // Public — pehla admin (secret key se protected, JWT nahi chahiye)
 router.post("/admin/register", adminRegister);
 

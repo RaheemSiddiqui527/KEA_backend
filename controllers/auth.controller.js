@@ -271,12 +271,21 @@ export const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
 
-    if (!email)
-      return res.status(400).json({ message: "Email is required" });
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email address is required" });
+    }
 
-    const user = await User.findOne({ email });
-    if (!user)
-      return res.status(404).json({ message: "No user found with that email" });
+    const cleanEmail = String(email).trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ success: false, message: "Please provide a valid email address" });
+    }
+
+    const escapedEmail = cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "No registered account found with that email address" });
+    }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
 
@@ -285,25 +294,33 @@ export const forgotPassword = async (req, res, next) => {
       .update(resetToken)
       .digest("hex");
 
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 min
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
 
     await user.save({ validateBeforeSave: false });
 
-    // Send password reset email
-    const origin = req.headers.origin || (user.role === "admin" ? (process.env.ADMIN_URL || "http://localhost:3001") : (process.env.FRONTEND_URL || "http://localhost:3000"));
-    const resetUrl = `${origin}/reset-password?token=${resetToken}`;
+    // Determine correct portal URL based on user role and request origin
+    const isAdminRole = user.role === "admin" || user.role === "superadmin";
+    const defaultAdminUrl = process.env.ADMIN_URL || "http://localhost:3001";
+    const defaultUserUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const origin = req.headers.origin || (isAdminRole ? defaultAdminUrl : defaultUserUrl);
+    const resetPath = isAdminRole ? "/admin/reset-password" : "/reset-password";
+    const resetUrl = `${origin}${resetPath}?token=${resetToken}`;
 
+    let emailResult = null;
     try {
-      await sendPasswordResetEmail(user.email, user.name, resetUrl);
+      emailResult = await sendPasswordResetEmail(user.email, user.name, resetUrl);
       console.log('✅ Password reset email dispatched for:', user.email);
     } catch (emailError) {
       console.warn('⚠️ Password reset email dispatch warning:', emailError.message);
     }
 
     res.status(200).json({
+      success: true,
       message: "Password reset instructions have been sent to your email.",
-      resetToken,
-      expiresIn: "10 minutes",
+      resetToken: process.env.NODE_ENV !== "production" ? resetToken : undefined,
+      resetUrl: process.env.NODE_ENV !== "production" ? resetUrl : undefined,
+      previewUrl: emailResult?.previewUrl || undefined,
+      expiresIn: "15 minutes",
     });
   } catch (err) {
     next(err);
@@ -315,11 +332,16 @@ export const forgotPassword = async (req, res, next) => {
 // ---------------------------------------
 export const resetPassword = async (req, res, next) => {
   try {
-    const { token } = req.params;
+    const token = (req.params.token || req.body.token || req.query.token || "").trim();
     const { password } = req.body;
 
-    if (!password)
-      return res.status(400).json({ message: "Password is required" });
+    if (!token) {
+      return res.status(400).json({ success: false, message: "Reset token is missing or required" });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters long" });
+    }
 
     const hashedToken = crypto
       .createHash("sha256")
@@ -331,8 +353,12 @@ export const resetPassword = async (req, res, next) => {
       resetPasswordExpires: { $gt: Date.now() },
     });
 
-    if (!user)
-      return res.status(400).json({ message: "Token invalid or expired" });
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset link is invalid, expired, or has already been used. Please request a new one."
+      });
+    }
 
     user.password = password;
     user.resetPasswordToken = undefined;
@@ -342,10 +368,16 @@ export const resetPassword = async (req, res, next) => {
 
     const jwtToken = signToken(user);
 
-    res.json({
-      message: "Password reset successful",
+    res.status(200).json({
+      success: true,
+      message: "Password reset successful! You can now log in with your new password.",
       token: jwtToken,
-      user,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     });
   } catch (err) {
     next(err);
