@@ -25,6 +25,28 @@ const getExistingFilePath = (filePath) => {
   return null;
 };
 
+// Helper to reliably find or auto-sync physical file on disk
+const ensurePhysicalFile = async (filePath) => {
+  const existing = getExistingFilePath(filePath);
+  if (existing) return existing;
+
+  // Fallback: If running in local dev connected to production MongoDB Atlas, auto-sync from production storage
+  try {
+    const remoteUrl = `https://api.kokaniengineers.org/${filePath}`;
+    const remoteRes = await fetch(remoteUrl);
+    if (remoteRes.ok) {
+      const buffer = await remoteRes.arrayBuffer();
+      const localDest = path.resolve(__dirname, '..', filePath);
+      fs.mkdirSync(path.dirname(localDest), { recursive: true });
+      fs.writeFileSync(localDest, Buffer.from(buffer));
+      return localDest;
+    }
+  } catch (err) {
+    // remote sync failed
+  }
+  return null;
+};
+
 // Helper to determine format & icon from file extension
 const getFormatAndIcon = (fileName) => {
   const ext = path.extname(fileName).toLowerCase();
@@ -396,7 +418,7 @@ export const viewResource = async (req, res) => {
 
     // Local file handling
     if (resource.filePath) {
-      const fullPath = getExistingFilePath(resource.filePath);
+      const fullPath = await ensurePhysicalFile(resource.filePath);
 
       if (!fullPath) {
         return res.status(404).json({ success: false, error: 'File not found on storage server' });
@@ -455,7 +477,7 @@ export const downloadResource = async (req, res) => {
     }
 
     if (resource.filePath) {
-      const fullPath = getExistingFilePath(resource.filePath);
+      const fullPath = await ensurePhysicalFile(resource.filePath);
 
       if (!fullPath) {
         return res.status(404).json({

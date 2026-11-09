@@ -4,8 +4,18 @@ import User from '../models/user.models.js';
 export const auth = async (req, res, next) => {
   try {
     const header = req.headers.authorization;
-    if (!header) return res.status(401).json({ message: 'No token provided' });
-    const token = header.split(' ')[1];
+    const queryToken = req.query?.token;
+
+    let token = null;
+    if (header && header.startsWith('Bearer ')) {
+      token = header.split(' ')[1];
+    } else if (header) {
+      token = header;
+    } else if (queryToken) {
+      token = queryToken;
+    }
+
+    if (!token) return res.status(401).json({ message: 'No token provided' });
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(payload.id);
     if (!user) return res.status(401).json({ message: 'Invalid token' });
@@ -20,9 +30,17 @@ export const auth = async (req, res, next) => {
 export const optionalAuth = async (req, res, next) => {
   try {
     const header = req.headers.authorization;
-    if (!header) return next();
-    
-    const token = header.split(' ')[1];
+    const queryToken = req.query?.token;
+
+    let token = null;
+    if (header && header.startsWith('Bearer ')) {
+      token = header.split(' ')[1];
+    } else if (header) {
+      token = header;
+    } else if (queryToken) {
+      token = queryToken;
+    }
+
     if (!token) return next();
 
     const payload = jwt.verify(token, process.env.JWT_SECRET);
