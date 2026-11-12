@@ -60,8 +60,8 @@ export const isAdmin = (req, res, next) => {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    // Check if user has admin role
-    if (req.user.role !== 'admin') {
+    // Check if user has admin or superadmin role
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
       return res.status(403).json({ 
         message: 'Admin access required. You do not have permission to perform this action.' 
       });
@@ -81,8 +81,8 @@ export const isModerator = (req, res, next) => {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    // Allow both admin and moderator roles
-    if (!['admin', 'moderator'].includes(req.user.role)) {
+    // Allow admin, superadmin, and moderator roles
+    if (!['admin', 'superadmin', 'moderator'].includes(req.user.role)) {
       return res.status(403).json({ 
         message: 'Moderator access required' 
       });

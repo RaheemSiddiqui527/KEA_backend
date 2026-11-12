@@ -6,7 +6,7 @@ import Thread from '../models/thread.models.js';
 //   try {
 //     const { category, search, page = 1, limit = 20, sort = 'latest' } = req.query;
 //     // console.log("req", req.user)
-//     const isAdmin = req.user?.role === 'admin';
+//     const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
 //     // console.log("isAdmin", isAdmin)
 //     const query = isAdmin ? {} : { status: 'approved' };
 
@@ -67,7 +67,7 @@ export const listThreads = async (req, res) => {
       sort = 'latest'
     } = req.query;
 
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
 
     const query = {};
 
@@ -145,7 +145,7 @@ export const listThreads = async (req, res) => {
 //       return res.status(404).json({ message: 'Thread not found' });
 //     }
 
-//     const isAdmin = req.user?.role === 'admin';
+//     const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
 
 //     if (thread.status !== 'approved' && !isAdmin) {
 //       return res.status(403).json({
@@ -179,7 +179,7 @@ export const getThread = async (req, res) => {
       return res.status(404).json({ message: 'Thread not found' });
     }
 
-    const isAdmin = req.user.role === 'admin';
+    const isAdmin = ['admin', 'superadmin'].includes(req.user.role);
 
     // 🔒 USERS can only see APPROVED threads
     if (!isAdmin && thread.status !== 'approved') {
@@ -224,7 +224,7 @@ export const approveThread = async (req, res) => {
 
 export const rejectThread = async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
       return res.status(403).json({
         message: 'Admin access only'
       });
@@ -376,7 +376,7 @@ export const likeReply = async (req, res) => {
 // Get category stats
 export const getCategoryStats = async (req, res) => {
   try {
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
     const matchStage = isAdmin ? {} : { status: 'approved' };
 
     const stats = await Thread.aggregate([
@@ -462,7 +462,7 @@ export const togglePinThread = async (req, res) => {
 
 export const editThread = async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Admin access only' });
     }
 

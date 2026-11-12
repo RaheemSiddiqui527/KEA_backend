@@ -225,8 +225,8 @@ export const getPendingRegistrations = async (req, res) => {
 
     if (!event) return res.status(404).json({ message: 'Event not found' });
 
-    // Check if requester is organizer
-    if (event.organizer.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    // Check if requester is organizer or admin/superadmin
+    if (event.organizer.toString() !== req.user._id.toString() && !['admin', 'superadmin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Unauthorized to view registrations' });
     }
 
@@ -244,7 +244,7 @@ export const approveRegistration = async (req, res) => {
 
     if (!event) return res.status(404).json({ message: 'Event not found' });
 
-    if (event.organizer.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (event.organizer.toString() !== req.user._id.toString() && !['admin', 'superadmin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Unauthorized to approve registrations' });
     }
 
@@ -301,7 +301,7 @@ export const rejectRegistration = async (req, res) => {
 
     if (!event) return res.status(404).json({ message: 'Event not found' });
 
-    if (event.organizer.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (event.organizer.toString() !== req.user._id.toString() && !['admin', 'superadmin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Unauthorized to reject registrations' });
     }
 
