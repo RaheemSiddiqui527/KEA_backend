@@ -207,9 +207,9 @@ export const login = async (req, res, next) => {
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
-    // ✅ Admin ko user login se block karo
-    if (user.role === "admin")
-      return res.status(403).json({ message: "Admins must use the admin login portal" });
+      // ✅ Admin / Superadmin ko user login se block karo
+      if (user.role === "admin" || user.role === "superadmin")
+        return res.status(403).json({ message: "Admins must use the admin login portal" });
 
     if (user.membershipStatus === "inactive")
       return res.status(403).json({ message: "Your membership has been deactivated." });
