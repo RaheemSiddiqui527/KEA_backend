@@ -7,20 +7,37 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Helper to extract clean relative upload path from any path variant (relative, absolute Linux, or absolute Windows)
+export const getNormalizedRelativeUploadPath = (filePath) => {
+  if (!filePath) return null;
+  const match = filePath.match(/(?:^|[/\\])(uploads[/\\][\s\S]+)$/i);
+  if (match) {
+    return match[1].replace(/\\/g, '/');
+  }
+  return filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+};
+
 // Helper to reliably find physical file on disk across CWDs
 const getExistingFilePath = (filePath) => {
   if (!filePath) return null;
-  if (path.isAbsolute(filePath) && fs.existsSync(filePath)) {
-    return filePath;
+  const cleanRelative = getNormalizedRelativeUploadPath(filePath);
+
+  // 1. Direct path check if exists
+  if (fs.existsSync(filePath)) {
+    return path.resolve(filePath);
   }
-  const candidate1 = path.resolve(filePath);
-  if (fs.existsSync(candidate1)) return candidate1;
 
-  const candidate2 = path.resolve(__dirname, '..', filePath);
-  if (fs.existsSync(candidate2)) return candidate2;
+  // 2. Relative to __dirname (controllers) -> ..
+  if (cleanRelative) {
+    const candidateBehindDir = path.resolve(__dirname, '..', cleanRelative);
+    if (fs.existsSync(candidateBehindDir)) return candidateBehindDir;
 
-  const candidate3 = path.resolve(process.cwd(), filePath);
-  if (fs.existsSync(candidate3)) return candidate3;
+    const candidateCwd = path.resolve(process.cwd(), cleanRelative);
+    if (fs.existsSync(candidateCwd)) return candidateCwd;
+
+    const candidateRelative = path.resolve(cleanRelative);
+    if (fs.existsSync(candidateRelative)) return candidateRelative;
+  }
 
   return null;
 };
@@ -30,13 +47,16 @@ const ensurePhysicalFile = async (filePath) => {
   const existing = getExistingFilePath(filePath);
   if (existing) return existing;
 
+  const cleanRelative = getNormalizedRelativeUploadPath(filePath);
+  if (!cleanRelative) return null;
+
   // Fallback: If running in local dev connected to production MongoDB Atlas, auto-sync from production storage
   try {
-    const remoteUrl = `https://api.kokaniengineers.org/${filePath}`;
+    const remoteUrl = `https://api.kokaniengineers.org/${cleanRelative}`;
     const remoteRes = await fetch(remoteUrl);
     if (remoteRes.ok) {
       const buffer = await remoteRes.arrayBuffer();
-      const localDest = path.resolve(__dirname, '..', filePath);
+      const localDest = path.resolve(__dirname, '..', cleanRelative);
       fs.mkdirSync(path.dirname(localDest), { recursive: true });
       fs.writeFileSync(localDest, Buffer.from(buffer));
       return localDest;
@@ -418,10 +438,12 @@ export const viewResource = async (req, res) => {
 
     // Local file handling
     if (resource.filePath) {
+      const cleanRelative = getNormalizedRelativeUploadPath(resource.filePath);
       const fullPath = await ensurePhysicalFile(resource.filePath);
 
       if (!fullPath) {
-        return res.status(404).json({ success: false, error: 'File not found on storage server' });
+        // Fallback gracefully to remote stream rather than giving 404 status error
+        return res.redirect(`https://api.kokaniengineers.org/api/resources/${resource._id}/view`);
       }
 
       const acceptsJson = req.headers.accept && req.headers.accept.includes('application/json');
@@ -430,7 +452,7 @@ export const viewResource = async (req, res) => {
       if (wantsJson && req.query.stream !== 'true') {
         const protocol = req.protocol;
         const host = req.get('host');
-        const url = `${protocol}://${host}/${resource.filePath}`;
+        const url = `${protocol}://${host}/${cleanRelative || resource.filePath}`;
 
         return res.json({
           success: true,
@@ -446,7 +468,7 @@ export const viewResource = async (req, res) => {
       res.setHeader('Content-Type', resource.mimeType || 'application/octet-stream');
       res.setHeader(
         'Content-Disposition',
-        `inline; filename="${encodeURIComponent(resource.originalFileName || resource.title + path.extname(resource.filePath))}"`
+        `inline; filename="${encodeURIComponent(resource.originalFileName || resource.title + path.extname(cleanRelative || resource.filePath))}"`
       );
       return res.sendFile(fullPath);
     }
@@ -477,16 +499,14 @@ export const downloadResource = async (req, res) => {
     }
 
     if (resource.filePath) {
+      const cleanRelative = getNormalizedRelativeUploadPath(resource.filePath);
       const fullPath = await ensurePhysicalFile(resource.filePath);
 
       if (!fullPath) {
-        return res.status(404).json({
-          success: false,
-          error: 'File does not exist on storage server',
-        });
+        return res.redirect(`https://api.kokaniengineers.org/api/resources/${resource._id}/download`);
       }
 
-      const downloadName = resource.originalFileName || `${resource.title}${path.extname(resource.filePath)}`;
+      const downloadName = resource.originalFileName || `${resource.title}${path.extname(cleanRelative || resource.filePath)}`;
       return res.download(fullPath, downloadName);
     }
 

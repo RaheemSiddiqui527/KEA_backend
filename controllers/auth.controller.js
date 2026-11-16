@@ -85,6 +85,8 @@ export const register = async (req, res, next) => {
         references: profile?.references || [],
         avatar: profile?.avatar || "",
         country: profile?.country || "",
+        howGroupHelped: profile?.howGroupHelped || req.body?.howGroupHelped || "",
+        contributionExpertise: profile?.contributionExpertise || req.body?.contributionExpertise || "",
         currentAddress
       },
       membershipStatus: membershipStatus || "pending"
