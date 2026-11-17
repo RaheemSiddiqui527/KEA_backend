@@ -42,6 +42,7 @@ export const register = async (req, res, next) => {
       pinCode: String(addr.pinCode || "").trim(),
       countryCode: String(addr.countryCode || "").trim(),
       stateCode: String(addr.stateCode || "").trim(),
+      postOffice: String(addr.postOffice || "").trim(),
     };
     // State may be empty only for countries that have no states/provinces
     const { addressLine, city, country, pinCode } = currentAddress;
