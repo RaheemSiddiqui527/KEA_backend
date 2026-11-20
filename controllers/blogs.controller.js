@@ -89,7 +89,13 @@ export const getBlog = async (req, res, next) => {
 
 export const addComment = async (req, res, next) => {
   try {
-    const { content } = req.body;
+    const { content } = req.body || {};
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error: Comment content is required'
+      });
+    }
     const blog = await Blog.findById(req.params.id);
     
     if (!blog) {

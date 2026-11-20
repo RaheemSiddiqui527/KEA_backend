@@ -232,7 +232,13 @@ export const sendCampaignBroadcast = async (req, res) => {
 // Admin: Send Test Campaign Email
 export const sendTestCampaign = async (req, res) => {
   try {
-    const { testEmail, subject, content } = req.body;
+    const { testEmail, subject, content } = req.body || {};
+    if (!testEmail && !subject && !content) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error: Missing required fields (testEmail, subject, or content)'
+      });
+    }
     const recipient = testEmail || req.user?.email || 'support@kokaniengineers.org';
 
     await sendBroadcastNewsletterEmail(

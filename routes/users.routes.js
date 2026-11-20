@@ -33,12 +33,12 @@ const {
   updateAvatar,
 } = userController;
 
-// ================= PUBLIC ROUTES =================
-router.get('/members', listMembers);
-router.get('/members/:id', getMember);
-
 // ================= PROTECTED ROUTES =================
 router.use(auth);
+
+// Member directory (Protected)
+router.get('/members', listMembers);
+router.get('/members/:id', getMember);
 
 // User profile
 router.get('/me', getMe);

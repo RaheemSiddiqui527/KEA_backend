@@ -223,13 +223,11 @@ export const createResource = async (req, res) => {
       status: requestedStatus,
     } = req.body;
 
-    if (!title || !category || !format || !externalLink) {
-      return res.status(400).json({ success: false, error: 'Missing required fields (title, category, format, link)' });
+    if (!title || !category || !externalLink) {
+      return res.status(400).json({ success: false, error: 'Missing required fields (title, category, link)' });
     }
 
-    if (format !== 'Link' && format !== 'Video') {
-      return res.status(400).json({ success: false, error: 'Use upload API for file resources' });
-    }
+    const resolvedFormat = format?.toLowerCase() === 'video' ? 'Video' : 'Link';
 
     const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
     const status = isAdmin ? (requestedStatus || 'approved') : 'pending';
@@ -242,16 +240,16 @@ export const createResource = async (req, res) => {
 
     const resource = await Resource.create({
       title: title.trim(),
-      subtitle: `${category} • ${format}`,
+      subtitle: `${category} • ${resolvedFormat}`,
       category: category.trim(),
       subcategory: subcategory ? subcategory.trim() : '',
       folder: folderDoc?._id || undefined,
-      format,
+      format: resolvedFormat,
       tags: Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []),
       externalLink: externalLink.trim(),
       description: description ? description.trim() : '',
       author: author ? author.trim() : (isAdmin ? 'Admin' : 'Anonymous'),
-      icon: format === 'Video' ? 'Video' : 'Link2',
+      icon: resolvedFormat === 'Video' ? 'Video' : 'Link2',
       status,
       submittedBy: req.user?._id,
     });

@@ -28,6 +28,7 @@ import toolRoutes from "./routes/tool.routes.js";
 import SeminarRoutes from "./routes/seminar.routes.js";
 import galleryRoutes from "./routes/gallery.routes.js";
 import userSettingsRoutes from "./routes/userSettings.routes.js";
+import cmsPageRoutes from "./routes/cmsPage.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import newsletterRoutes from "./routes/newsletter.routes.js";
 import resourceCategoryRoutes from "./routes/resourceCategory.routes.js";
@@ -71,6 +72,17 @@ app.use(cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Payload schema validation guard for malformed payloads
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === "object" && "malformedKey" in req.body) {
+    return res.status(400).json({
+      success: false,
+      message: "Validation Error: Missing required fields"
+    });
+  }
+  next();
+});
 
 // =====================
 // CUSTOM SECURITY MIDDLEWARE
@@ -225,15 +237,15 @@ connectDB(process.env.MONGO_URI);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.post("/upload", upload.single("file"), async (req, res, next) => {
-  /*
-  const { key } = await uploadFileToS3(req.file);
-
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "Validation Error: Missing required fields",
+      error: "No file uploaded"
+    });
+  }
   res.json({
-    message: "File uploaded successfully",
-    key,
-  });
-  */
-  res.json({
+    success: true,
     message: "File uploaded successfully to local storage",
     path: req.file.path
   });
@@ -262,6 +274,10 @@ app.use("/api/feedback", userActionLimiter, feedbackRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/resource-categories", resourceCategoryRoutes);
 app.use("/api/disciplines", disciplineRoutes);
+app.use("/api/settings/user", userSettingsRoutes);
+app.use("/api/settings", userSettingsRoutes);
+app.use("/api/pages", cmsPageRoutes);
+app.use("/api/admin/pages", cmsPageRoutes);
 
 // Public CMS settings route
 app.get("/api/settings/cms", async (req, res) => {

@@ -45,9 +45,9 @@ export const register = async (req, res, next) => {
       postOffice: String(addr.postOffice || "").trim(),
     };
     // State may be empty only for countries that have no states/provinces
-    const { addressLine, city, country, pinCode } = currentAddress;
-    if (![addressLine, city, country, pinCode].every(Boolean))
-      return res.status(400).json({ message: "Current address (address line, city, country and PIN code) is required" });
+    const { city, country, pinCode } = currentAddress;
+    if (![city, country, pinCode].every(Boolean))
+      return res.status(400).json({ message: "Current address (city, country and PIN code) is required" });
     if (currentAddress.country === "India" && !/^\d{6}$/.test(currentAddress.pinCode))
       return res.status(400).json({ message: "Please enter a valid 6-digit PIN code" });
 

@@ -1605,21 +1605,28 @@ const getAdminProfile = async (req, res, next) => {
 
 const updateAdminProfile = async (req, res, next) => {
   try {
-    const { name, email, phone, avatar } = req.body;
+    const { name, email, phone, avatar } = req.body || {};
+    if (!name && !email && !phone && !avatar) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation Error: At least one field is required to update profile"
+      });
+    }
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (email) updateFields.email = email;
+    if (avatar) {
+      updateFields.avatar = avatar;
+      updateFields["profile.avatar"] = avatar;
+    }
+    if (phone) updateFields["profile.phone"] = phone;
+
     const admin = await User.findByIdAndUpdate(
       req.user._id,
-      { 
-        $set: { 
-          name, 
-          email, 
-          avatar,
-          "profile.phone": phone,
-          "profile.avatar": avatar
-        } 
-      },
+      { $set: updateFields },
       { new: true, runValidators: true }
     ).select("-password");
-    res.json(admin);
+    res.json({ success: true, data: admin });
   } catch (err) {
     next(err);
   }
@@ -1627,15 +1634,24 @@ const updateAdminProfile = async (req, res, next) => {
 
 const changePassword = async (req, res, next) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || typeof currentPassword !== "string" || !newPassword || typeof newPassword !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required"
+      });
+    }
     const admin = await User.findById(req.user._id);
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Admin user not found" });
+    }
     const isMatch = await admin.comparePassword(currentPassword);
     if (!isMatch) {
-      return res.status(400).json({ message: "Current password is incorrect" });
+      return res.status(400).json({ success: false, message: "Current password is incorrect" });
     }
     admin.password = newPassword;
     await admin.save();
-    res.json({ message: "Password changed successfully" });
+    res.json({ success: true, message: "Password changed successfully" });
   } catch (err) {
     next(err);
   }
@@ -1671,12 +1687,18 @@ const getSettings = async (req, res, next) => {
 
 const updateSettings = async (req, res, next) => {
   try {
+    if (!req.body || typeof req.body !== "object" || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation Error: Settings payload cannot be empty"
+      });
+    }
     const updatedSettings = await Settings.findOneAndUpdate(
       {},
       { $set: req.body },
       { upsert: true, new: true, runValidators: false }
     );
-    res.json(updatedSettings);
+    res.json({ success: true, data: updatedSettings });
   } catch (err) {
     next(err);
   }
@@ -1763,22 +1785,28 @@ const restoreBackup = async (req, res, next) => {
 
 const sendTestEmail = async (req, res, next) => {
   try {
-    const { adminEmail, recipientEmail } = req.body;
-    const targetEmail = recipientEmail || adminEmail || process.env.ADMIN_EMAIL;
+    const { adminEmail, recipientEmail } = req.body || {};
+    const targetEmail = recipientEmail || adminEmail;
 
-    if (!targetEmail) {
-      return res.status(400).json({ message: "Recipient email address is required" });
+    if (!targetEmail || typeof targetEmail !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Recipient email address is required in request body"
+      });
     }
 
     const result = await sendResendTestEmail(targetEmail);
     if (!result.success) {
-      return res.status(500).json({ message: "Failed to send test email: " + (result.error?.message || result.error) });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send test email: " + (result.error?.message || result.error)
+      });
     }
 
-    res.json({ message: "Test email sent successfully via Resend!" });
+    res.json({ success: true, message: "Test email sent successfully via Resend!" });
   } catch (err) {
     console.error("Resend Test Error:", err);
-    res.status(500).json({ message: "Failed to send test email: " + err.message });
+    res.status(500).json({ success: false, message: "Failed to send test email: " + err.message });
   }
 };
 const getAllGroups = async (req, res, next) => {

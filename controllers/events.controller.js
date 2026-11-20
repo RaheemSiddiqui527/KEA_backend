@@ -363,10 +363,12 @@ export const unregisterFromEvent = async (req, res) => {
 // Get calendar events
 export const getCalendarEvents = async (req, res) => {
   try {
-    const { year, month } = req.query;
+    const now = new Date();
+    const currentYear = req.query.year ? parseInt(req.query.year) : now.getFullYear();
+    const currentMonth = req.query.month !== undefined && req.query.month !== '' ? parseInt(req.query.month) : now.getMonth();
     
-    const startOfMonth = new Date(parseInt(year), parseInt(month), 1);
-    const endOfMonth = new Date(parseInt(year), parseInt(month) + 1, 0, 23, 59, 59);
+    const startOfMonth = new Date(currentYear, currentMonth, 1);
+    const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
     
     const events = await Event.find({
       status: 'approved',

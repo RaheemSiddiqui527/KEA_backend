@@ -61,6 +61,13 @@ export const updateMe = async (req, res, next) => {
       }
     }
 
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation Error: No valid profile fields provided for update'
+      });
+    }
+
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateData },

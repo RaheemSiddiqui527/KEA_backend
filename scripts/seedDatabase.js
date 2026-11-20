@@ -10,6 +10,12 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 import ResourceCategory from '../models/resourceCategory.models.js';
 import Discipline from '../models/discipline.models.js';
+import Tool from '../models/tool.models.js';
+import Seminar from '../models/seminar.models.js';
+import Group from '../models/group.models.js';
+import Gallery from '../models/gallery.models.js';
+import Feedback from '../models/feedback.models.js';
+import User from '../models/user.models.js';
 
 const initialCategories = [
   { name: 'AI/ML', subcategories: ['Deep Learning', 'NLP', 'Computer Vision', 'LLMs & Prompting'] },
@@ -47,6 +53,7 @@ const initialDisciplines = [
   { name: 'Industrial Engineering', type: 'Engineering' },
   { name: 'Software Engineering', type: 'Engineering' },
   { name: 'Marine Engineering', type: 'Engineering' },
+  { name: 'Instrumentation', type: 'Engineering' },
   // Professional Disciplines
   { name: 'Information Technology', type: 'Professional' },
   { name: 'Architecture', type: 'Professional' },
@@ -99,6 +106,80 @@ const seedDB = async () => {
       }
     }
     console.log('Disciplines seeded successfully');
+
+    // Seed default fixtures for Tool, Seminar, Group, Gallery, Feedback
+    const seedUser = await User.findOne({ role: { $in: ['admin', 'superadmin'] } }) || await User.findOne();
+
+    console.log('Seeding default Tools...');
+    const existingTool = await Tool.findOne();
+    if (!existingTool) {
+      await Tool.create({
+        name: 'AutoCAD Tools Pack',
+        category: 'Civil',
+        description: 'Engineering design and drafting toolkit for structural plans',
+        platform: 'Windows',
+        license: 'Free'
+      });
+      console.log('Default Tool seeded successfully');
+    }
+
+    console.log('Seeding default Seminars...');
+    const existingSeminar = await Seminar.findOne();
+    if (!existingSeminar) {
+      await Seminar.create({
+        title: 'Annual Engineering Seminar',
+        category: 'Technology',
+        description: 'Annual professional engineering conference and technical talks',
+        date: new Date(Date.now() + 7 * 86400000),
+        time: '10:00 AM',
+        venue: 'Convention Center',
+        organizer: 'KEA Executive Committee'
+      });
+      console.log('Default Seminar seeded successfully');
+    }
+
+    if (seedUser) {
+      console.log('Seeding default Groups...');
+      const existingGroup = await Group.findOne();
+      if (!existingGroup) {
+        await Group.create({
+          name: 'Civil Engineers Network',
+          description: 'Professional group for civil and structural engineers',
+          category: 'Civil',
+          creator: seedUser._id,
+          members: [seedUser._id]
+        });
+        console.log('Default Group seeded successfully');
+      }
+
+      console.log('Seeding default Gallery items...');
+      const existingGallery = await Gallery.findOne();
+      if (!existingGallery) {
+        await Gallery.create({
+          title: 'Annual Meeting 2026',
+          description: 'Photographs from association annual gathering',
+          category: 'Event Category',
+          uploadedBy: seedUser._id,
+          status: 'approved'
+        });
+        console.log('Default Gallery item seeded successfully');
+      }
+    }
+
+    console.log('Seeding default Feedback...');
+    const existingFeedback = await Feedback.findOne();
+    if (!existingFeedback) {
+      await Feedback.create({
+        category: 'General',
+        subject: 'Platform Feedback',
+        message: 'The association platform is running smoothly and efficiently.',
+        priority: 'Medium',
+        status: 'reviewed',
+        contactName: 'KEA Member',
+        contactEmail: 'member@kokaniengineers.org'
+      });
+      console.log('Default Feedback seeded successfully');
+    }
 
     process.exit(0);
   } catch (err) {

@@ -3,7 +3,25 @@ import Discipline from '../models/discipline.models.js';
 // Get all active disciplines
 export const getActiveDisciplines = async (req, res) => {
   try {
-    const disciplines = await Discipline.find({ isActive: true }).sort({ name: 1 });
+    let disciplines = await Discipline.find({ isActive: true }).sort({ name: 1 });
+    const hasInstrumentation = disciplines.some(
+      (d) => d.name?.toLowerCase() === 'instrumentation'
+    );
+    if (!hasInstrumentation) {
+      try {
+        const created = await Discipline.create({
+          name: 'Instrumentation',
+          nameLower: 'instrumentation',
+          type: 'Engineering',
+          isActive: true,
+        });
+        disciplines.push(created);
+        disciplines.sort((a, b) => a.name.localeCompare(b.name));
+      } catch (err) {
+        disciplines.push({ _id: 'temp_inst', name: 'Instrumentation', type: 'Engineering', isActive: true });
+        disciplines.sort((a, b) => a.name.localeCompare(b.name));
+      }
+    }
     res.json({ success: true, disciplines });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to fetch disciplines' });
@@ -13,7 +31,25 @@ export const getActiveDisciplines = async (req, res) => {
 // Get all disciplines (for Admin)
 export const getAllDisciplines = async (req, res) => {
   try {
-    const disciplines = await Discipline.find().sort({ name: 1 });
+    let disciplines = await Discipline.find().sort({ name: 1 });
+    const hasInstrumentation = disciplines.some(
+      (d) => d.name?.toLowerCase() === 'instrumentation'
+    );
+    if (!hasInstrumentation) {
+      try {
+        const created = await Discipline.create({
+          name: 'Instrumentation',
+          nameLower: 'instrumentation',
+          type: 'Engineering',
+          isActive: true,
+        });
+        disciplines.push(created);
+        disciplines.sort((a, b) => a.name.localeCompare(b.name));
+      } catch (err) {
+        disciplines.push({ _id: 'temp_inst', name: 'Instrumentation', type: 'Engineering', isActive: true });
+        disciplines.sort((a, b) => a.name.localeCompare(b.name));
+      }
+    }
     res.json({ success: true, disciplines });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to fetch disciplines' });
