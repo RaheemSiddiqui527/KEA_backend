@@ -51,6 +51,20 @@ export const register = async (req, res, next) => {
     if (currentAddress.country === "India" && !/^\d{6}$/.test(currentAddress.pinCode))
       return res.status(400).json({ message: "Please enter a valid 6-digit PIN code" });
 
+    // Validate professional details for user registration (step 2)
+    if (role !== "admin") {
+      const headline = String(profile?.headline || "").trim();
+      const company = String(profile?.company || "").trim();
+      const position = String(profile?.position || "").trim();
+      if (!headline || !company || !position) {
+        const missing = [];
+        if (!headline) missing.push("Professional Headline");
+        if (!company) missing.push("Company Name");
+        if (!position) missing.push("Position");
+        return res.status(400).json({ message: `Please provide: ${missing.join(", ")}` });
+      }
+    }
+
     const exists = await User.findOne({ email });
     if (exists)
       return res.status(400).json({ message: "Email already in use" });

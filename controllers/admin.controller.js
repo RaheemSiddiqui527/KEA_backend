@@ -12,6 +12,8 @@ import Thread from "../models/thread.models.js";
 import Group from "../models/group.models.js";
 import Settings from "../models/settings.model.js";
 import JobApplication from "../models/JobApplication.models.js";
+import SavedJob from "../models/savedJob.models.js";
+import EventRegistration from "../models/EventRegistration.models.js";
 import Resume from "../models/resume.models.js";
 import mongoose from "mongoose";
 import fs from "fs";
@@ -709,6 +711,25 @@ const rejectJob = async (req, res, next) => {
   }
 };
 
+const deleteJob = async (req, res, next) => {
+  try {
+    const job = await Job.findByIdAndDelete(req.params.id);
+    if (!job) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    // Clean up related applications and saved jobs
+    await Promise.all([
+      JobApplication.deleteMany({ job: req.params.id }),
+      SavedJob.deleteMany({ job: req.params.id }),
+    ]);
+
+    res.json({ message: "Job deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Job Applications
 const getJobApplications = async (req, res, next) => {
   try {
@@ -830,6 +851,18 @@ const rejectBlog = async (req, res, next) => {
   }
 };
 
+const deleteBlog = async (req, res, next) => {
+  try {
+    const blog = await Blog.findByIdAndDelete(req.params.id);
+    if (!blog) {
+      return res.status(404).json({ message: "Blog not found" });
+    }
+    res.json({ message: "Blog deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Events
 const getAllEvents = async (req, res, next) => {
   try {
@@ -887,6 +920,19 @@ const rejectEvent = async (req, res, next) => {
     ).populate("organizer", "name email");
     if (!ev) return res.status(404).json({ message: "Event not found" });
     res.json(ev);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteEvent = async (req, res, next) => {
+  try {
+    const ev = await Event.findByIdAndDelete(req.params.id);
+    if (!ev) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    await EventRegistration.deleteMany({ event: req.params.id });
+    res.json({ message: "Event deleted successfully" });
   } catch (err) {
     next(err);
   }
@@ -2087,14 +2133,17 @@ export default {
   pendingJobs,
   approveJob,
   rejectJob,
+  deleteJob,
   getJobApplications,
   updateJobApplicationStatus,
   pendingBlogs,
   approveBlog,
   rejectBlog,
+  deleteBlog,
   pendingEvents,
   approveEvent,
   rejectEvent,
+  deleteEvent,
   dashboardStats,
   getAllMembers,
   getAllJobs,

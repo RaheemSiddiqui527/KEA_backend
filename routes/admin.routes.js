@@ -93,6 +93,7 @@ router.get('/jobs/:id', adminReadLimiter, AdminController.getJobById);
 // Write operations
 router.post('/jobs/approve/:id', adminWriteLimiter, AdminController.approveJob);
 router.post('/jobs/reject/:id', adminWriteLimiter, AdminController.rejectJob);
+router.delete('/jobs/:id', adminWriteLimiter, AdminController.deleteJob);
 router.patch('/jobs/applications/:id/status', adminWriteLimiter, AdminController.updateJobApplicationStatus);
 
 // =====================
@@ -107,6 +108,7 @@ router.get('/blogs/:id', adminReadLimiter, AdminController.getBlogById);
 // Write operations
 router.post('/blogs/approve/:id', adminWriteLimiter, AdminController.approveBlog);
 router.post('/blogs/reject/:id', adminWriteLimiter, AdminController.rejectBlog);
+router.delete('/blogs/:id', adminWriteLimiter, AdminController.deleteBlog);
 
 // =====================
 // EVENTS ROUTES
@@ -120,6 +122,7 @@ router.get('/events/:id', adminReadLimiter, AdminController.getEventById);
 // Write operations
 router.post('/events/approve/:id', adminWriteLimiter, AdminController.approveEvent);
 router.post('/events/reject/:id', adminWriteLimiter, AdminController.rejectEvent);
+router.delete('/events/:id', adminWriteLimiter, AdminController.deleteEvent);
 
 // =====================
 // GALLERY ROUTES

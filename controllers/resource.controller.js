@@ -3,6 +3,8 @@ import ResourceCategory from '../models/resourceCategory.models.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import mammoth from 'mammoth';
+import * as xlsx from 'xlsx';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -462,13 +464,205 @@ export const viewResource = async (req, res) => {
         });
       }
 
-      // Stream file directly to browser (PDF, images, etc.)
-      res.setHeader('Content-Type', resource.mimeType || 'application/octet-stream');
-      res.setHeader(
-        'Content-Disposition',
-        `inline; filename="${encodeURIComponent(resource.originalFileName || resource.title + path.extname(cleanRelative || resource.filePath))}"`
-      );
-      return res.sendFile(fullPath);
+      // Stream or render file directly for inline viewing (PDF, DOCX, XLSX, TXT, Images, Videos)
+      const ext = path.extname(fullPath).toLowerCase();
+      const safeFilename = (resource.originalFileName || resource.title || 'document').replace(/[^\w\s.-]/gi, '');
+      const docTitle = resource.originalFileName || resource.title || 'Document Preview';
+
+      // 1. DOCX inline render to formatted HTML
+      if (ext === '.docx') {
+        try {
+          const mammothResult = await mammoth.convertToHtml({ path: fullPath });
+          const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${docTitle}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1e293b;
+      background: #f1f5f9;
+      margin: 0;
+      padding: 32px 16px;
+      display: flex;
+      justify-content: center;
+    }
+    .page {
+      max-width: 900px;
+      width: 100%;
+      background: #ffffff;
+      padding: 48px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+      border: 1px solid #e2e8f0;
+      box-sizing: border-box;
+      min-height: 80vh;
+    }
+    h1, h2, h3, h4, h5, h6 { color: #0f172a; margin-top: 1.4em; margin-bottom: 0.5em; font-weight: 700; }
+    p { margin-bottom: 1em; font-size: 15px; }
+    table { border-collapse: collapse; width: 100%; margin: 1.5em 0; border: 1px solid #cbd5e1; }
+    th, td { border: 1px solid #cbd5e1; padding: 10px 14px; text-align: left; font-size: 14px; }
+    th { background: #f8fafc; font-weight: 600; color: #334155; }
+    img { max-width: 100%; height: auto; border-radius: 6px; }
+    ul, ol { padding-left: 24px; margin-bottom: 1em; }
+    li { margin-bottom: 0.4em; }
+    a { color: #2563eb; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    ${mammothResult.value || '<p style="color:#64748b;font-style:italic;">Empty document.</p>'}
+  </div>
+</body>
+</html>`;
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('Content-Disposition', `inline; filename="${safeFilename}.html"`);
+          return res.send(html);
+        } catch (mErr) {
+          console.error('Mammoth docx conversion error:', mErr);
+        }
+      }
+
+      // 2. Excel & CSV inline render to formatted HTML table
+      if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
+        try {
+          const workbook = xlsx.readFile(fullPath);
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const htmlTable = xlsx.utils.sheet_to_html(worksheet);
+          const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${docTitle}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      color: #1e293b;
+      background: #f1f5f9;
+      margin: 0;
+      padding: 32px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .page {
+      max-width: 1100px;
+      width: 100%;
+      background: #ffffff;
+      padding: 32px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      border: 1px solid #e2e8f0;
+      box-sizing: border-box;
+      overflow-x: auto;
+    }
+    h2 { margin-top: 0; margin-bottom: 16px; font-size: 18px; color: #0f172a; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; white-space: nowrap; }
+    th { background: #f8fafc; font-weight: 600; color: #334155; }
+    tr:nth-child(even) td { background: #f8fafc; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h2>${firstSheetName || 'Sheet 1'}</h2>
+    ${htmlTable}
+  </div>
+</body>
+</html>`;
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('Content-Disposition', `inline; filename="${safeFilename}.html"`);
+          return res.send(html);
+        } catch (xErr) {
+          console.error('XLSX conversion error:', xErr);
+        }
+      }
+
+      // 3. Plain text files (.txt, .md, .log, .json)
+      if (ext === '.txt' || ext === '.log' || ext === '.md' || ext === '.json') {
+        try {
+          const textContent = fs.readFileSync(fullPath, 'utf-8');
+          const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${docTitle}</title>
+  <style>
+    body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #1e293b;
+      background: #f8fafc;
+      margin: 0;
+      padding: 32px 16px;
+      display: flex;
+      justify-content: center;
+    }
+    .page {
+      max-width: 900px;
+      width: 100%;
+      background: #ffffff;
+      padding: 32px;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">${textContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+</body>
+</html>`;
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('Content-Disposition', `inline; filename="${safeFilename}.html"`);
+          return res.send(html);
+        } catch (tErr) {
+          console.error('Text read error:', tErr);
+        }
+      }
+
+      // 4. PDF, Images, Videos, Audio, etc. (Direct inline streaming)
+      const mimeMap = {
+        '.pdf': 'application/pdf',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.txt': 'text/plain; charset=utf-8',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.doc': 'application/msword',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.xls': 'application/vnd.ms-excel',
+        '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        '.ppt': 'application/vnd.ms-powerpoint',
+      };
+
+      const mimeType = mimeMap[ext] || resource.mimeType || 'application/octet-stream';
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+
+      return res.sendFile(fullPath, {
+        headers: {
+          'Content-Type': mimeType,
+          'Content-Disposition': `inline; filename="${safeFilename}"`,
+        },
+      });
     }
 
     return res.status(400).json({ success: false, error: 'No file found for this resource' });
