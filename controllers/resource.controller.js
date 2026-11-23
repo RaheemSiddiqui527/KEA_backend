@@ -428,6 +428,14 @@ export const viewResource = async (req, res) => {
       });
     }
 
+    // Set headers explicitly to allow iframe embedding across all live domains
+    res.removeHeader('X-Frame-Options');
+    res.setHeader(
+      'Content-Security-Policy',
+      "frame-ancestors 'self' https://admin.kokaniengineers.org https://kokaniengineers.org https://*.kokaniengineers.org https://*.vercel.app https://*.nexcorealliance.com http://localhost:* http://127.0.0.1:*;"
+    );
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
     // External link
     if (!resource.filePath && !resource.wasabiKey) {
       if (resource.externalLink) {
@@ -442,8 +450,37 @@ export const viewResource = async (req, res) => {
       const fullPath = await ensurePhysicalFile(resource.filePath);
 
       if (!fullPath) {
-        // Fallback gracefully to remote stream rather than giving 404 status error
-        return res.redirect(`https://api.kokaniengineers.org/api/resources/${resource._id}/view`);
+        // Prevent infinite redirect loop when running on api.kokaniengineers.org
+        const host = req.get('host') || '';
+        const isAlreadyOnRemote = host.includes('kokaniengineers.org');
+
+        if (!isAlreadyOnRemote) {
+          return res.redirect(`https://api.kokaniengineers.org/api/resources/${resource._id}/view`);
+        }
+
+        // On production, if physical file is missing from disk:
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(404).send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>File Not Found</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f172a; color: #f8fafc; text-align: center; }
+    .card { background: #1e293b; padding: 40px; border-radius: 16px; border: 1px solid #334155; max-width: 450px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }
+    h2 { margin-top: 0; color: #f87171; font-size: 18px; }
+    p { font-size: 13px; color: #94a3b8; line-height: 1.6; }
+    .code { font-family: monospace; background: #0f172a; padding: 4px 8px; border-radius: 6px; color: #38bdf8; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Document File Not Found on Server</h2>
+    <p>The file <span class="code">${resource.originalFileName || resource.title}</span> was not found in the live server storage.</p>
+    <p>If this document was uploaded during local testing, please re-upload it directly on the live admin panel so the physical file is stored on the live server.</p>
+  </div>
+</body>
+</html>`);
       }
 
       const acceptsJson = req.headers.accept && req.headers.accept.includes('application/json');
