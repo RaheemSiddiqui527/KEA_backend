@@ -44,17 +44,33 @@ const allowedOrigins = [
   "http://127.0.0.1:3000",
   "https://kea-user.vercel.app",
   "https://admin.kokaniengineers.org",
+  "https://www.admin.kokaniengineers.org",
   "https://kokaniengineers.org",
+  "https://www.kokaniengineers.org",
+  "https://api.kokaniengineers.org",
   "https://kea-admin.vercel.app",
   "https://admin.kea.nexcorealliance.com",
   "https://user.kea.nexcorealliance.com",
 ].filter(Boolean);
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  // Localhost regex
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/.test(origin)) return true;
+  // Any kokaniengineers.org domain (e.g. www, admin, api, etc.)
+  if (/^https?:\/\/([a-zA-Z0-9-]+\.)*kokaniengineers\.org$/.test(origin)) return true;
+  // Any vercel preview domain
+  if (/^https?:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(origin)) return true;
+  // Any nexcorealliance domain
+  if (/^https?:\/\/([a-zA-Z0-9-]+\.)*nexcorealliance\.com$/.test(origin)) return true;
+  return false;
+};
+
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow non-browser requests (e.g. mobile apps, curl, server-to-server)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/.test(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error(`CORS blocked for origin: ${origin}`));
