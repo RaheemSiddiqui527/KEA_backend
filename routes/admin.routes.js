@@ -21,6 +21,7 @@ const adminReadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
+  validate: { xForwardedForHeader: false },
 });
 
 // Moderate rate limiter for admin write operations
@@ -30,6 +31,7 @@ const adminWriteLimiter = rateLimit({
   message: 'Too many write operations, please slow down',
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 // Strict rate limiter for sensitive operations - 20 requests per 15 minutes
@@ -39,6 +41,7 @@ const adminSensitiveLimiter = rateLimit({
   message: 'Too many sensitive operations, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 // Very strict rate limiter for critical operations - 5 requests per 15 minutes
@@ -48,6 +51,7 @@ const adminCriticalLimiter = rateLimit({
   message: 'Critical operation limit reached, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 // =====================

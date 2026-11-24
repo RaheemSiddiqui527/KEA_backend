@@ -36,6 +36,9 @@ import disciplineRoutes from "./routes/discipline.routes.js";
 import upload from "./utils/upload.js";
 const app = express();
 
+// Trust reverse proxy (Nginx, Cloudflare, etc.) so express-rate-limit and req.ip work accurately
+app.set("trust proxy", 1);
+
 const allowedOrigins = [
   process.env.CORS_ORIGIN,
   "http://localhost:3000",
@@ -234,6 +237,7 @@ const apiLimiter = rateLimit({
   message: "Too many requests from this IP, please try again after 15 minutes",
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 const authLimiter = rateLimit({
@@ -244,6 +248,7 @@ const authLimiter = rateLimit({
     "Too many authentication attempts, please try again after 15 minutes",
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 const userActionLimiter = rateLimit({
@@ -252,6 +257,7 @@ const userActionLimiter = rateLimit({
   message: "Too many requests, please slow down",
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 
 app.use("/api/", apiLimiter);
