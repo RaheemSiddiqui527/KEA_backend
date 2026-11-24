@@ -51,7 +51,7 @@ export const searchJobs = async (req, res, next) => {
     
     const [jobs, total] = await Promise.all([
       Job.find(filter)
-        .populate('postedBy', 'name email')
+        .populate('postedBy', 'name email phone profile')
         .sort({ createdAt: -1 })
         .limit(parseInt(limit))
         .skip(skip),
@@ -74,7 +74,7 @@ export const searchJobs = async (req, res, next) => {
 
 export const getJob = async (req, res, next) => {
   try {
-    const job = await Job.findById(req.params.id).populate('postedBy', 'name email');
+    const job = await Job.findById(req.params.id).populate('postedBy', 'name email phone profile');
     
     if (!job) {
       return res.status(404).json({ message: 'Job not found' });

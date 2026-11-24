@@ -636,7 +636,7 @@ const deleteMember = async (req, res, next) => {
 const getAllJobs = async (req, res, next) => {
   try {
     const jobs = await Job.find()
-      .populate("postedBy", "name email")
+      .populate("postedBy", "name email phone profile memberId role")
       .sort({ createdAt: -1 });
     res.json(jobs);
   } catch (err) {
@@ -646,7 +646,7 @@ const getAllJobs = async (req, res, next) => {
 
 const getJobById = async (req, res, next) => {
   try {
-    const job = await Job.findById(req.params.id).populate("postedBy", "name email");
+    const job = await Job.findById(req.params.id).populate("postedBy", "name email phone profile memberId role");
     if (!job) return res.status(404).json({ message: "Job not found" });
     res.json(job);
   } catch (err) {
@@ -656,7 +656,7 @@ const getJobById = async (req, res, next) => {
 
 const pendingJobs = async (req, res, next) => {
   try {
-    const jobs = await Job.find({ status: "pending" }).populate("postedBy", "name email");
+    const jobs = await Job.find({ status: "pending" }).populate("postedBy", "name email phone profile memberId role");
     res.json(jobs);
   } catch (err) {
     next(err);
@@ -669,7 +669,7 @@ const approveJob = async (req, res, next) => {
       req.params.id,
       { status: "approved" },
       { new: true }
-    ).populate("postedBy", "name email");
+    ).populate("postedBy", "name email phone profile memberId role");
     if (!job) return res.status(404).json({ message: "Job not found" });
     
     // Send approval email
@@ -693,7 +693,7 @@ const rejectJob = async (req, res, next) => {
       req.params.id,
       { status: "rejected" },
       { new: true }
-    ).populate("postedBy", "name email");
+    ).populate("postedBy", "name email phone profile memberId role");
     if (!job) return res.status(404).json({ message: "Job not found" });
 
     // Send rejection email
