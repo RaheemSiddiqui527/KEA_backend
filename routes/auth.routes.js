@@ -15,11 +15,12 @@ import {
 
 const router = express.Router();
 
-// 🔒 Login rate limiter: Limits consecutive failed attempts to 5 per 15 minutes.
-// Successful logins are skipped. When 5 failures occur, returns HTTP 429.
+// 🔒 Login rate limiter: Limits consecutive failed attempts (5 in prod, 50 in dev)
+// Successful logins are skipped. When failed attempts limit is reached, returns HTTP 429.
+const isProduction = process.env.NODE_ENV === "production";
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  max: isProduction ? 5 : 50,
   skipSuccessfulRequests: true,
   message: {
     success: false,
