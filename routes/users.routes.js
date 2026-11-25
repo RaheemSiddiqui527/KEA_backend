@@ -2,6 +2,7 @@ import express from 'express';
 import { auth } from '../middleware/auth.middleware.js';
 import userController from '../controllers/user.controller.js';
 import upload from '../middleware/upload.middleware.js';
+import resumeUploadMiddleware from '../middleware/resumeUpload.middleware.js';
 import avatarUpload from '../middleware/avatarUpload.middleware.js';
 import Resume from '../models/resume.models.js';
 
@@ -17,6 +18,7 @@ const {
   markNotificationRead,
   uploadResume,
   viewResume,
+  streamResumeFile,
   getMyResumes,
   deleteResume,
   listMembers,
@@ -55,10 +57,11 @@ router.get('/notifications', getUserNotifications);
 router.patch('/notifications/:id/read', markNotificationRead);
 
 // Resumes
-router.post('/me/resumes', upload.single('file'), uploadResume);
+router.post('/me/resumes', resumeUploadMiddleware, uploadResume);
 router.get('/me/resumes', getMyResumes);
 router.delete('/me/resumes/:id', deleteResume);
 router.get('/me/resumes/:id/view', viewResume);
+router.get('/me/resumes/:id/file', streamResumeFile);
 
 // Jobs
 router.post('/jobs/save', saveJob);

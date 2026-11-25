@@ -14,6 +14,50 @@ const signToken = (user) => {
   );
 };
 
+const isProduction = process.env.NODE_ENV === "production";
+
+// Helper: Set HttpOnly, Secure, SameSite session cookie
+export const setSessionCookie = (res, token) => {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: "/",
+  };
+  res.cookie("token", token, cookieOptions);
+  res.cookie("userToken", token, cookieOptions);
+};
+
+export const setAdminSessionCookie = (res, token) => {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: "/",
+  };
+  res.cookie("token", token, cookieOptions);
+  res.cookie("adminToken", token, cookieOptions);
+};
+
+export const clearSessionCookie = (res) => {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    path: "/",
+  };
+  res.clearCookie("token", cookieOptions);
+  res.clearCookie("userToken", cookieOptions);
+  res.clearCookie("adminToken", cookieOptions);
+};
+
+export const logout = (req, res) => {
+  clearSessionCookie(res);
+  res.json({ success: true, message: "Logged out successfully" });
+};
+
 // ---------------------------------------
 // REGISTER USER (with email notification)
 // ---------------------------------------
@@ -115,6 +159,7 @@ export const register = async (req, res, next) => {
     }
 
     const token = signToken(user);
+    setSessionCookie(res, token);
 
     res.status(201).json({
       message: "Registration successful. Check your email for confirmation.",
@@ -194,6 +239,7 @@ export const adminRegister = async (req, res, next) => {
     }
 
     const token = signToken(user);
+    setAdminSessionCookie(res, token);
 
     res.status(201).json({
       message: "Admin registered successfully.",
@@ -216,17 +262,48 @@ export const login = async (req, res, next) => {
     if (!email || !password)
       return res.status(400).json({ message: "Missing credentials" });
 
-    const user = await User.findOne({ email });
-    if (!user)
+    const cleanEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      await new Promise(r => setTimeout(r, 200));
       return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // 🔒 Account lockout check
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
+      return res.status(429).json({
+        message: `Account is temporarily locked due to consecutive failed login attempts. Please try again after ${remainingMinutes} minute(s) or reset your password.`
+      });
+    }
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch)
-      return res.status(401).json({ message: "Invalid credentials" });
+    if (!isMatch) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+      if (user.failedLoginAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 min lockout
+      }
+      await user.save();
 
-      // ✅ Admin / Superadmin ko user login se block karo
-      if (user.role === "admin" || user.role === "superadmin")
-        return res.status(403).json({ message: "Admins must use the admin login portal" });
+      if (user.failedLoginAttempts >= 5) {
+        return res.status(429).json({
+          message: "Account is temporarily locked due to consecutive failed login attempts. Please try again after 15 minutes or reset your password."
+        });
+      }
+
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Reset counters on successful login
+    if (user.failedLoginAttempts > 0 || user.lockUntil) {
+      user.failedLoginAttempts = 0;
+      user.lockUntil = undefined;
+      await user.save();
+    }
+
+    // ✅ Admin / Superadmin ko user login se block karo
+    if (user.role === "admin" || user.role === "superadmin")
+      return res.status(403).json({ message: "Admins must use the admin login portal" });
 
     if (user.membershipStatus === "inactive")
       return res.status(403).json({ message: "Your membership has been deactivated." });
@@ -235,6 +312,7 @@ export const login = async (req, res, next) => {
       return res.status(403).json({ message: "Your membership is pending admin approval." });
 
     const token = signToken(user);
+    setSessionCookie(res, token);
 
     res.json({
       message: "Login successful",
@@ -257,19 +335,51 @@ export const adminLogin = async (req, res, next) => {
     if (!email || !password)
       return res.status(400).json({ message: "Missing credentials" });
 
-    const user = await User.findOne({ email });
-    if (!user)
+    const cleanEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      await new Promise(r => setTimeout(r, 200));
       return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // 🔒 Account lockout check
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
+      return res.status(429).json({
+        message: `Account is temporarily locked due to consecutive failed login attempts. Please try again after ${remainingMinutes} minute(s) or reset your password.`
+      });
+    }
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch)
+    if (!isMatch) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+      if (user.failedLoginAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+      }
+      await user.save();
+
+      if (user.failedLoginAttempts >= 5) {
+        return res.status(429).json({
+          message: "Account is temporarily locked due to consecutive failed login attempts. Please try again after 15 minutes or reset your password."
+        });
+      }
+
       return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Reset counters on successful login
+    if (user.failedLoginAttempts > 0 || user.lockUntil) {
+      user.failedLoginAttempts = 0;
+      user.lockUntil = undefined;
+      await user.save();
+    }
 
     // ✅ Role check — only admins and superadmins get through
     if (user.role !== "admin" && user.role !== "superadmin")
       return res.status(403).json({ message: "Access denied. Admins only." });
 
     const token = signToken(user);
+    setAdminSessionCookie(res, token);
 
     res.json({
       message: "Admin login successful",
@@ -301,7 +411,11 @@ export const forgotPassword = async (req, res, next) => {
     const escapedEmail = cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const user = await User.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
     if (!user) {
-      return res.status(404).json({ success: false, message: "No registered account found with that email address" });
+      // Security fix (Anti-User Enumeration): Always return the same generic response
+      return res.status(200).json({
+        success: true,
+        message: "If an account exists with this email, password reset instructions will be sent.",
+      });
     }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
@@ -323,21 +437,61 @@ export const forgotPassword = async (req, res, next) => {
     const resetPath = isAdminRole ? "/admin/reset-password" : "/reset-password";
     const resetUrl = `${origin}${resetPath}?token=${resetToken}`;
 
-    let emailResult = null;
+    // Send password reset email with the raw single-use token in the link
     try {
-      emailResult = await sendPasswordResetEmail(user.email, user.name, resetUrl);
+      await sendPasswordResetEmail(user.email, user.name, resetUrl);
       console.log('✅ Password reset email dispatched for:', user.email);
     } catch (emailError) {
       console.warn('⚠️ Password reset email dispatch warning:', emailError.message);
     }
 
+    // Security fix: Never expose resetToken, resetUrl, or any reset credentials in API response bodies
     res.status(200).json({
       success: true,
-      message: "Password reset instructions have been sent to your email.",
-      resetToken: process.env.NODE_ENV !== "production" ? resetToken : undefined,
-      resetUrl: process.env.NODE_ENV !== "production" ? resetUrl : undefined,
-      previewUrl: emailResult?.previewUrl || undefined,
-      expiresIn: "15 minutes",
+      message: "If an account exists with this email, password reset instructions will be sent.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------------------------------------
+// VERIFY RESET TOKEN (Validates link without exposing credentials)
+// ---------------------------------------
+export const verifyResetToken = async (req, res, next) => {
+  try {
+    const token = (req.params.token || req.body?.token || req.query?.token || "").trim();
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        message: "Reset token is missing or required",
+      });
+    }
+
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        message: "Reset link is invalid, expired, or has already been used. Please request a new one.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      valid: true,
+      message: "Reset token is valid.",
     });
   } catch (err) {
     next(err);

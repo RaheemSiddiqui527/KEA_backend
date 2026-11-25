@@ -11,6 +11,7 @@ import Event from '../models/event.models.js'; // ← ADDED
 import Blog from '../models/blog.models.js'; // ← ADDED
 
 import { autoFetchSkills } from '../utils/resume.utils.js';
+import { validateFileSignature } from '../middleware/resumeUpload.middleware.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -127,16 +128,32 @@ export const getDashboardStats = async (req, res, next) => {
       status: 'accepted'
     });
 
-    // Calculate changes (example - you can implement actual logic)
+    // Calculate month-over-month changes (no fake growth if 0)
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    const [prevApps, prevSaved, prevEvents, prevConns] = await Promise.all([
+      JobApplication.countDocuments({ user: userId, createdAt: { $lt: oneMonthAgo } }),
+      SavedJob.countDocuments({ user: userId, createdAt: { $lt: oneMonthAgo } }),
+      EventRegistration.countDocuments({ user: userId, createdAt: { $lt: oneMonthAgo } }),
+      Connection.countDocuments({ user: userId, status: 'accepted', createdAt: { $lt: oneMonthAgo } }),
+    ]);
+
+    const calcGrowth = (current, previous) => {
+      if (!current || current === 0) return 0;
+      if (!previous || previous === 0) return 0;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
     const stats = {
       applications: jobApplications,
-      applicationsChange: 12, // Calculate from previous month
+      applicationsChange: calcGrowth(jobApplications, prevApps),
       savedJobs: savedJobs,
-      savedJobsChange: 5,
+      savedJobsChange: calcGrowth(savedJobs, prevSaved),
       eventsRegistered: eventsRegistered,
-      eventsChange: 8,
+      eventsChange: calcGrowth(eventsRegistered, prevEvents),
       connections: connections,
-      connectionsChange: 15
+      connectionsChange: calcGrowth(connections, prevConns)
     };
 
     res.json(stats);
@@ -210,34 +227,61 @@ export const markNotificationRead = async (req, res, next) => {
 // Upload resume
 export const uploadResume = async (req, res, next) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: "File is required" });
+    if (req.skippedUploadFiles && req.skippedUploadFiles.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file format. Only PDF, DOC, and DOCX files are allowed.",
+      });
     }
 
-    // Auto-fetch skills from the resume
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Please select a file to upload." });
+    }
+
+    // Security check: Validate file signature (magic bytes) to prevent extension spoofing
+    const isSignatureValid = validateFileSignature(req.file.path);
+    if (!isSignatureValid) {
+      if (fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch {}
+      }
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file content. The file does not match a valid PDF, DOC, or DOCX document signature.",
+      });
+    }
+
+    // Auto-fetch skills from the resume if PDF
     let skills = [];
     if (req.file.mimetype === 'application/pdf') {
-      skills = await autoFetchSkills(req.file.path);
+      try {
+        skills = await autoFetchSkills(req.file.path);
+      } catch (skillErr) {
+        console.warn('Auto fetch skills warning:', skillErr.message);
+      }
     }
+
+    // Store relative path securely on server, never exposing absolute paths
+    const relativePath = path.relative(process.cwd(), req.file.path).replace(/\\/g, '/');
 
     const resume = await Resume.create({
       user: req.user._id,
       title: req.body.title || req.file.originalname,
-      filePath: req.file.path.replace(/\\/g, '/'), // Store relative path
+      filePath: relativePath,
+      fileName: req.file.filename,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
       skills: skills
     });
 
-    // ✅ UPDATE USER PROFILE SKILLS
-    if (skills.length > 0) {
+    // Update user profile skills if extracted
+    if (skills && skills.length > 0) {
       await User.findByIdAndUpdate(req.user._id, {
         $addToSet: { "profile.skills": { $each: skills } }
-      });
-      console.log(`✅ Updated skills for user ${req.user._id}:`, skills);
+      }).catch(() => {});
     }
 
+    // Return sanitized resume (toJSON automatically strips filePath)
     res.status(201).json(resume);
   } catch (err) {
     console.error("Resume upload error:", err);
@@ -245,7 +289,7 @@ export const uploadResume = async (req, res, next) => {
   }
 };
 
-// View resume file (Returns URL for frontend)
+// View resume file (Returns safe authorized stream URL for frontend)
 export const viewResume = async (req, res, next) => {
   try {
     const resume = await Resume.findOne({
@@ -254,21 +298,83 @@ export const viewResume = async (req, res, next) => {
     });
 
     if (!resume) {
-      return res.status(404).json({ message: "Resume not found" });
+      return res.status(404).json({ success: false, message: "Resume not found" });
     }
 
-    // Return the local URL for the frontend to use
+    const token = req.headers.authorization
+      ? req.headers.authorization.split(' ')[1]
+      : (req.query?.token || '');
+
     const protocol = req.protocol;
     const host = req.get('host');
-    const url = `${protocol}://${host}/${resume.filePath}`;
+    const url = `${protocol}://${host}/api/users/me/resumes/${resume._id}/file${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
-    res.json({ url });
+    res.json({ success: true, url });
   } catch (err) {
     next(err);
   }
 };
 
+// Stream resume file content securely with access control checks
+export const streamResumeFile = async (req, res, next) => {
+  try {
+    const resume = await Resume.findById(req.params.id);
+    if (!resume) {
+      return res.status(404).json({ success: false, message: "Resume not found" });
+    }
 
+    // Role-based and ownership access control:
+    const isOwner = req.user && resume.user.toString() === req.user._id.toString();
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin');
+    let isJobPoster = false;
+
+    if (req.user && !isOwner && !isAdmin) {
+      const application = await JobApplication.findOne({
+        resume: resume._id
+      }).populate('job');
+      if (application?.job?.postedBy && application.job.postedBy.toString() === req.user._id.toString()) {
+        isJobPoster = true;
+      }
+    }
+
+    if (!isOwner && !isAdmin && !isJobPoster) {
+      return res.status(403).json({ success: false, message: "Access denied. You are not authorized to view this resume." });
+    }
+
+    // Resolve physical file path securely (prevent directory traversal)
+    const baseUploads = path.resolve(process.cwd(), 'uploads/documents');
+    let physicalPath = null;
+    if (resume.filePath) {
+      const candidate = path.isAbsolute(resume.filePath)
+        ? resume.filePath
+        : path.resolve(process.cwd(), resume.filePath);
+      if (fs.existsSync(candidate)) physicalPath = candidate;
+    }
+    if (!physicalPath && resume.filePath) {
+      const candidate = path.join(baseUploads, path.basename(resume.filePath));
+      if (fs.existsSync(candidate)) physicalPath = candidate;
+    }
+    if (!physicalPath && resume.fileName) {
+      const candidate = path.join(baseUploads, path.basename(resume.fileName));
+      if (fs.existsSync(candidate)) physicalPath = candidate;
+    }
+
+    if (!physicalPath || !fs.existsSync(physicalPath)) {
+      return res.status(404).json({ success: false, message: "Resume file not found on server" });
+    }
+
+    // Security headers: Prevent MIME confusion, rendering active content, and XSS
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', resume.mimeType || 'application/pdf');
+    const safeName = (resume.originalName || 'resume.pdf').replace(/[^\w\s.-]/gi, '');
+    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+
+    const stream = fs.createReadStream(physicalPath);
+    stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+};
 
 export const getMyResumes = async (req, res, next) => {
   try {
@@ -281,20 +387,28 @@ export const getMyResumes = async (req, res, next) => {
   }
 };
 
-// Get user's resumes
+// Get user's resume URL
 export const getResumeUrl = async (req, res, next) => {
   try {
     const resume = await Resume.findById(req.params.id);
     if (!resume) {
-      return res.status(404).json({ message: "Resume not found" });
+      return res.status(404).json({ success: false, message: "Resume not found" });
     }
 
-    // Return the local URL
+    const isOwner = req.user && resume.user.toString() === req.user._id.toString();
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin');
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    const token = req.headers.authorization
+      ? req.headers.authorization.split(' ')[1]
+      : (req.query?.token || '');
     const protocol = req.protocol;
     const host = req.get('host');
-    const url = `${protocol}://${host}/${resume.filePath}`;
+    const url = `${protocol}://${host}/api/users/me/resumes/${resume._id}/file${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
-    res.json({ url });
+    res.json({ success: true, url });
   } catch (err) {
     next(err);
   }
@@ -674,5 +788,6 @@ export default {
   getMyEventRegistrations,
   connectWithUser,
   getMyConnections,
-  updateAvatar
+  updateAvatar,
+  streamResumeFile
 };

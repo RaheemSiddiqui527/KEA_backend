@@ -5,13 +5,22 @@ export const auth = async (req, res, next) => {
   try {
     const header = req.headers.authorization;
     const queryToken = req.query?.token;
+    const cookieToken = req.cookies?.token || req.cookies?.userToken || req.cookies?.adminToken;
 
     let token = null;
     if (header && header.startsWith('Bearer ')) {
-      token = header.split(' ')[1];
-    } else if (header) {
+      const extracted = header.split(' ')[1];
+      if (extracted && extracted !== 'null' && extracted !== 'undefined' && extracted !== 'session-active') {
+        token = extracted;
+      }
+    } else if (header && header !== 'null' && header !== 'undefined' && header !== 'session-active') {
       token = header;
-    } else if (queryToken) {
+    }
+
+    // Fallback to HttpOnly session cookie
+    if (!token && cookieToken) {
+      token = cookieToken;
+    } else if (!token && queryToken && queryToken !== 'session-active' && queryToken !== 'null' && queryToken !== 'undefined') {
       token = queryToken;
     }
 
@@ -31,13 +40,22 @@ export const optionalAuth = async (req, res, next) => {
   try {
     const header = req.headers.authorization;
     const queryToken = req.query?.token;
+    const cookieToken = req.cookies?.token || req.cookies?.userToken || req.cookies?.adminToken;
 
     let token = null;
     if (header && header.startsWith('Bearer ')) {
-      token = header.split(' ')[1];
-    } else if (header) {
+      const extracted = header.split(' ')[1];
+      if (extracted && extracted !== 'null' && extracted !== 'undefined' && extracted !== 'session-active') {
+        token = extracted;
+      }
+    } else if (header && header !== 'null' && header !== 'undefined' && header !== 'session-active') {
       token = header;
-    } else if (queryToken) {
+    }
+
+    // Fallback to HttpOnly session cookie
+    if (!token && cookieToken) {
+      token = cookieToken;
+    } else if (!token && queryToken && queryToken !== 'session-active' && queryToken !== 'null' && queryToken !== 'undefined') {
       token = queryToken;
     }
 

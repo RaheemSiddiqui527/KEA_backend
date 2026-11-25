@@ -87,6 +87,10 @@ const UserSchema = new mongoose.Schema(
     emailVerificationToken: { type: String },
     emailVerificationExpires: { type: Date },
 
+    // Account lockout & brute-force protection
+    failedLoginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date },
+
     // Notification Preferences
     notificationPreferences: {
       email: { type: Boolean, default: true },

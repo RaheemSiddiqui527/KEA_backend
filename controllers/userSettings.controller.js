@@ -139,13 +139,11 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({ message: 'Current password is incorrect' });
     }
     
-    // Hash new password
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    
+    // Set new password (UserSchema.pre('save') automatically hashes with bcrypt)
+    user.password = newPassword;
     await user.save();
     
-    res.json({ message: 'Password changed successfully' });
+    res.json({ success: true, message: 'Password changed successfully' });
   } catch (err) {
     console.error('❌ Error in changePassword:', err);
     res.status(500).json({ message: 'Error changing password', error: err.message });

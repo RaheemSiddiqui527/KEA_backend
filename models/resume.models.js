@@ -32,4 +32,12 @@ const resumeSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Security: Never expose internal server filesystem path in JSON responses
+resumeSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    delete ret.filePath;
+    return ret;
+  },
+});
+
 export default mongoose.model('Resume', resumeSchema);

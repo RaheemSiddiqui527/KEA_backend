@@ -736,9 +736,26 @@ const getJobApplications = async (req, res, next) => {
     const applications = await JobApplication.find()
       .populate("user", "name email profile")
       .populate("job", "title company location category")
-      .populate("resume", "title filePath originalName size")
+      .populate("resume", "title originalName size")
       .sort({ createdAt: -1 });
-    res.json(applications);
+
+    const token = req.headers.authorization
+      ? req.headers.authorization.split(' ')[1]
+      : (req.query?.token || '');
+    const protocol = req.protocol;
+    const host = req.get('host');
+
+    const sanitized = applications.map(app => {
+      const appObj = app.toObject();
+      if (appObj.resume) {
+        // Safe stream URL instead of internal server filesystem path
+        appObj.resume.filePath = `api/admin/resumes/${appObj.resume._id}/file${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        appObj.resume.fileUrl = `${protocol}://${host}/api/admin/resumes/${appObj.resume._id}/file${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      }
+      return appObj;
+    });
+
+    res.json(sanitized);
   } catch (err) {
     next(err);
   }

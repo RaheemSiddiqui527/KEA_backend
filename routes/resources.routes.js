@@ -26,9 +26,9 @@ router.post('/admin', auth, createResource);
 router.put('/admin/:id', auth, upload.single('file'), updateResource);
 router.delete('/admin/:id', auth, deleteResource);
 
-// ================= VIEW & DOWNLOAD (MUST BE BEFORE :id) =================
-router.get('/:id/view', viewResource);
-router.get('/:id/download', downloadResource);
+// ================= VIEW & DOWNLOAD (Protected - Members & Admins Only) =================
+router.get('/:id/view', auth, viewResource);
+router.get('/:id/download', auth, downloadResource);
 
 // ================= CRUD =================
 router.get('/:id', auth, getResourceById);

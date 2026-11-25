@@ -1,5 +1,5 @@
 import express from 'express';
-import { auth } from '../middleware/auth.middleware.js';
+import { auth, optionalAuth } from '../middleware/auth.middleware.js';
 import {
   listMentors,
   getMentor,
@@ -15,23 +15,20 @@ import {
 
 const router = express.Router();
 
-// All mentor routes require authentication
-router.use(auth);
-
 // Specific routes (MUST come before /:id)
-router.get('/stats', getMentorStats);
-router.get('/me/profile', getMyMentorProfile);
-router.get('/admin/all', getAllMentorsAdmin);
+router.get('/stats', auth, getMentorStats);
+router.get('/me/profile', auth, getMyMentorProfile);
+router.get('/admin/all', auth, getAllMentorsAdmin);
 
 // Collection routes
-router.get('/', listMentors);
-router.post('/', createMentor);
+router.get('/', optionalAuth, listMentors);
+router.post('/', auth, createMentor);
 
 // Dynamic /:id routes
-router.get('/:id', getMentor);
-router.put('/:id', updateMentor);
-router.post('/:id/book', bookSession);
-router.post('/:id/approve', approveMentor);
-router.post('/:id/reject', rejectMentor);
+router.get('/:id', optionalAuth, getMentor);
+router.put('/:id', auth, updateMentor);
+router.post('/:id/book', auth, bookSession);
+router.post('/:id/approve', auth, approveMentor);
+router.post('/:id/reject', auth, rejectMentor);
 
 export default router;

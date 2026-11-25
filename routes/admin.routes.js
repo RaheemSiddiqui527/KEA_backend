@@ -4,6 +4,7 @@ import AdminController, { adminGetAllResources, adminGetStats, approveResource, 
 import { auth } from '../middleware/auth.middleware.js';
 import { requireRole } from '../middleware/role.middleware.js';
 import { deleteResource, getResourceById, uploadResource, createResource, updateResource, downloadResource, viewResource } from '../controllers/resource.controller.js';
+import { streamResumeFile } from '../controllers/user.controller.js';
 import upload from '../middleware/upload.middleware.js';
 import { sendBulkEmail, getEmailLogs } from '../controllers/communications.controller.js';
 
@@ -99,6 +100,7 @@ router.post('/jobs/approve/:id', adminWriteLimiter, AdminController.approveJob);
 router.post('/jobs/reject/:id', adminWriteLimiter, AdminController.rejectJob);
 router.delete('/jobs/:id', adminWriteLimiter, AdminController.deleteJob);
 router.patch('/jobs/applications/:id/status', adminWriteLimiter, AdminController.updateJobApplicationStatus);
+router.get('/resumes/:id/file', adminReadLimiter, streamResumeFile);
 
 // =====================
 // BLOGS ROUTES

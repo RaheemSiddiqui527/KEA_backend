@@ -51,7 +51,7 @@ export const searchJobs = async (req, res, next) => {
     
     const [jobs, total] = await Promise.all([
       Job.find(filter)
-        .populate('postedBy', 'name email phone profile')
+        .populate('postedBy', 'name')
         .sort({ createdAt: -1 })
         .limit(parseInt(limit))
         .skip(skip),
@@ -74,7 +74,10 @@ export const searchJobs = async (req, res, next) => {
 
 export const getJob = async (req, res, next) => {
   try {
-    const job = await Job.findById(req.params.id).populate('postedBy', 'name email phone profile');
+    // Security: Only authorized admins get full poster PII (phone, email, address). Public gets sanitized name.
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin');
+    const posterFields = isAdmin ? 'name email phone profile' : 'name';
+    const job = await Job.findById(req.params.id).populate('postedBy', posterFields);
     
     if (!job) {
       return res.status(404).json({ message: 'Job not found' });

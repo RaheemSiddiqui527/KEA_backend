@@ -29,7 +29,15 @@ const getExistingFilePath = (filePath) => {
     return path.resolve(filePath);
   }
 
-  // 2. Relative to __dirname (controllers) -> ..
+  // 2. Base uploads folder check by filename (Handles files uploaded on any OS/server, Linux /home/escape/... or Windows)
+  const baseName = path.basename(filePath);
+  const candidateDocs = path.resolve(__dirname, '../uploads/documents', baseName);
+  if (fs.existsSync(candidateDocs)) return candidateDocs;
+
+  const candidateUploads = path.resolve(__dirname, '../uploads', baseName);
+  if (fs.existsSync(candidateUploads)) return candidateUploads;
+
+  // 3. Relative to __dirname (controllers) -> ..
   if (cleanRelative) {
     const candidateBehindDir = path.resolve(__dirname, '..', cleanRelative);
     if (fs.existsSync(candidateBehindDir)) return candidateBehindDir;
@@ -434,7 +442,14 @@ export const viewResource = async (req, res) => {
       'Content-Security-Policy',
       "frame-ancestors 'self' https://admin.kokaniengineers.org https://kokaniengineers.org https://*.kokaniengineers.org https://*.vercel.app https://*.nexcorealliance.com http://localhost:* http://127.0.0.1:*;"
     );
-    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
 
     // External link
     if (!resource.filePath && !resource.wasabiKey) {
